@@ -1,0 +1,79 @@
+import os
+import time
+from aiogram import Bot, Dispatcher, types
+from aiogram.filters import CommandStart
+from aiogram.enums import ParseMode
+from aiogram.client.default import DefaultBotProperties
+from app.config import settings
+from app.tinder_client import TinderClient
+
+bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
+dp = Dispatcher()
+tinder_client = TinderClient()
+
+# Extremely simple in-memory rate limiting (Note: In Vercel, this is ephemeral per instance)
+user_rate_limit = {}
+RATE_LIMIT_SECONDS = 5
+
+@dp.message(CommandStart())
+async def cmd_start(message: types.Message):
+    await message.answer(
+        "👋 Welcome to the Tinder Profile Analyzer Bot!\n\n"
+        "Send me a Tinder profile URL (e.g., https://tinder.com/@username) or just a username to get public metadata.\n\n"
+        "<i>Note: I can only fetch publicly available information. Many details are hidden for privacy.</i>"
+    )
+
+@dp.message()
+async def analyze_profile(message: types.Message):
+    user_id = message.from_user.id
+    
+    # Rate Limiting
+    current_time = time.time()
+    if user_id in user_rate_limit and current_time - user_rate_limit[user_id] < RATE_LIMIT_SECONDS:
+        remaining = int(RATE_LIMIT_SECONDS - (current_time - user_rate_limit[user_id]))
+        await message.answer(f"⏳ Please wait {remaining} seconds before sending another request.")
+        return
+        
+    user_rate_limit[user_id] = current_time
+    input_text = message.text
+
+    username = tinder_client.extract_username(input_text)
+    if not username:
+        await message.answer("❌ Invalid format. Please send a valid Tinder URL or username.")
+        return
+
+    msg = await message.answer(f"🔍 Analyzing profile for <b>{username}</b>...")
+    
+    data = await tinder_client.get_profile_data(username)
+    
+    if data["status"] == "not_found":
+        await msg.edit_text(f"❌ Profile <b>{username}</b> not found. It may be inactive, deleted, or hidden.")
+        return
+    elif data["status"] == "error":
+        await msg.edit_text("⚠️ An error occurred while fetching the profile. Please try again later.")
+        return
+        
+    bot_info = await bot.get_me()
+    
+    report = (
+        f"🔍 <b>[Tinder Analysis Bot]</b>\n\n"
+        f"• Account Status: ✅ Active\n"
+        f"• Username: @{username}\n"
+        f"• Display Name: {data.get('name') or 'N/A'}\n"
+        f"• Age: {data.get('age') or 'Unknown'} years\n"
+        f"• Account Age: {data.get('account_age') or 'Unknown'}\n"
+        f"• Registration Time: {data.get('creation_date') or 'Unknown'}\n"
+        f"• Account ID: <code>{data.get('account_id') or 'Unknown'}</code>\n"
+        f"Official Link: https://tinder.com/@{username}\n\n"
+        f"🤖 Bot: https://t.me/{bot_info.username}"
+    )
+    
+    await msg.delete()
+    
+    if data.get("image_url"):
+        try:
+            await message.answer_photo(photo=data["image_url"], caption=report)
+        except Exception:
+            await message.answer(report, disable_web_page_preview=True)
+    else:
+        await message.answer(report, disable_web_page_preview=True)

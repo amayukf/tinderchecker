@@ -1,0 +1,16 @@
+version: '3.8'
+
+services:
+  tinder_bot:
+    build: .
+    container_name: tinder_bot
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./data:/app/data
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_URL=sqlite+aiosqlite:////app/data/bot.db
+    env_file:
+      - .env

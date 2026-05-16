@@ -1,0 +1,6 @@
+venv/
+__pycache__/
+*.pyc
+.env
+tinder_bot.db
+data/

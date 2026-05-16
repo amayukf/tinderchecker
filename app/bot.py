@@ -1,6 +1,7 @@
 import os
 import time
 from aiogram import Bot, Dispatcher, types
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -70,10 +71,15 @@ async def analyze_profile(message: types.Message):
     
     await msg.delete()
     
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛒 Sell This Account", url="https://t.me/T_ump")],
+        [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
+    ])
+    
     if data.get("image_url"):
         try:
-            await message.answer_photo(photo=data["image_url"], caption=report)
+            await message.answer_photo(photo=data["image_url"], caption=report, reply_markup=keyboard)
         except Exception:
-            await message.answer(report, disable_web_page_preview=True)
+            await message.answer(report, disable_web_page_preview=True, reply_markup=keyboard)
     else:
-        await message.answer(report, disable_web_page_preview=True)
+        await message.answer(report, disable_web_page_preview=True, reply_markup=keyboard)

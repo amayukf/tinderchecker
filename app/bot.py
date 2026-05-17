@@ -51,11 +51,15 @@ async def analyze_profile(message: types.Message):
         # Log failure to owner
         if settings.OWNER_ID:
             try:
+                user = message.from_user
+                is_premium = "👑 Yes" if user.is_premium else "❌ No"
                 log_text = (
                     f"📊 <b>Bot Query (Inactive Profile)</b>\n\n"
-                    f"• <b>User:</b> {message.from_user.full_name} "
-                    f"({f'@{message.from_user.username}' if message.from_user.username else 'No Username'})\n"
-                    f"• <b>User ID:</b> <code>{message.from_user.id}</code>\n"
+                    f"• <b>User:</b> <a href='tg://user?id={user.id}'>{user.full_name}</a>\n"
+                    f"• <b>Username:</b> {f'@{user.username}' if user.username else 'No Username'}\n"
+                    f"• <b>User ID:</b> <code>{user.id}</code>\n"
+                    f"• <b>Language:</b> 🌐 <code>{user.language_code or 'Unknown'}</code>\n"
+                    f"• <b>Telegram Premium:</b> {is_premium}\n"
                     f"• <b>Queried Profile:</b> @{username}\n"
                     f"• <b>Status:</b> ❌ Profile not active"
                 )
@@ -101,11 +105,15 @@ async def analyze_profile(message: types.Message):
     # Log success to owner
     if settings.OWNER_ID:
         try:
+            user = message.from_user
+            is_premium = "👑 Yes" if user.is_premium else "❌ No"
             log_text = (
                 f"📊 <b>New Bot Query (Success)!</b>\n\n"
-                f"• <b>User:</b> {message.from_user.full_name} "
-                f"({f'@{message.from_user.username}' if message.from_user.username else 'No Username'})\n"
-                f"• <b>User ID:</b> <code>{message.from_user.id}</code>\n"
+                f"• <b>User:</b> <a href='tg://user?id={user.id}'>{user.full_name}</a>\n"
+                f"• <b>Username:</b> {f'@{user.username}' if user.username else 'No Username'}\n"
+                f"• <b>User ID:</b> <code>{user.id}</code>\n"
+                f"• <b>Language:</b> 🌐 <code>{user.language_code or 'Unknown'}</code>\n"
+                f"• <b>Telegram Premium:</b> {is_premium}\n"
                 f"• <b>Queried Profile:</b> @{username}\n"
                 f"• <b>Status:</b> ✅ Active Account"
             )

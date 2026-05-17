@@ -206,7 +206,11 @@ class TinderClient:
                         api_url = f"https://api.gotinder.com/user/{account_id}"
                         api_headers = {
                             "X-Auth-Token": settings.TINDER_AUTH_TOKEN,
-                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+                            "Platform": "web",
+                            "Tinder-Version": "7.17.2",
+                            "Accept": "application/json",
+                            "Persistent-Device-Id": "27e67614-f72b-48f5-88cd-2a7ad49c2b40"
                         }
                         async with httpx.AsyncClient(timeout=10) as client:
                             api_resp = await client.get(api_url, headers=api_headers)

@@ -44,52 +44,138 @@ class TinderClient:
                     
                 soup = BeautifulSoup(response.text, 'html.parser')
                 
-                # Fallback: Extract from OpenGraph tags
+                # Primary attempt: Parse raw JSON state injected by Tinder in script tags
+                user_obj = None
+                try:
+                    script_tags = soup.find_all("script")
+                    for s in script_tags:
+                        if s.string and '"_id":"' in s.string:
+                            start_idx = s.string.find('{')
+                            end_idx = s.string.rfind('}')
+                            if start_idx != -1 and end_idx != -1:
+                                json_data = json.loads(s.string[start_idx:end_idx+1])
+                                
+                                def find_user_dict(d):
+                                    if isinstance(d, dict):
+                                        if "user" in d and isinstance(d["user"], dict) and "_id" in d["user"]:
+                                            return d["user"]
+                                        for k, v in d.items():
+                                            res = find_user_dict(v)
+                                            if res is not None:
+                                                return res
+                                    elif isinstance(d, list):
+                                        for item in d:
+                                            res = find_user_dict(item)
+                                            if res is not None:
+                                                return res
+                                    return None
+                                
+                                user_obj = find_user_dict(json_data)
+                                if user_obj:
+                                    break
+                except Exception:
+                    pass
+                
+                # Extract meta fallback data
                 og_title = soup.find("meta", property="og:title")
                 og_desc = soup.find("meta", property="og:description")
                 og_image = soup.find("meta", property="og:image")
                 
                 title = og_title["content"] if og_title else ""
-                # Strip user tag and Tinder branding from title to get clean Display Name
                 title_clean = re.sub(r'\s*\(@[a-zA-Z0-9_]+\)\s*\|\s*Tinder', '', title).strip()
                 title_clean = title_clean.replace(" - Tinder", "").replace(" | Tinder", "").strip()
                 desc = og_desc["content"] if og_desc else ""
                 image = og_image["content"] if og_image else ""
                 
-                # We extract name
-                name = title_clean
-                
-                # Extract Birth Date and Calculate Age
-                birth_date = "Hidden"
-                age = "Unknown"
-                dob_match = re.search(r'"birth_date":"([^"]+)"', response.text)
-                if dob_match:
-                    try:
-                        import datetime
-                        birth_date_full = dob_match.group(1)
-                        birth_date = birth_date_full.split('T')[0]
-                        dob = datetime.datetime.strptime(birth_date, "%Y-%m-%d")
-                        today = datetime.datetime.today()
-                        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-                    except Exception:
-                        pass
+                # Map extracted JSON or fallbacks
+                if user_obj:
+                    name = user_obj.get("name") or title_clean
+                    birth_date_full = user_obj.get("birth_date") or ""
+                    
+                    # Calculate Age
+                    birth_date = "Hidden"
+                    age = "Unknown"
+                    if birth_date_full:
+                        try:
+                            import datetime
+                            birth_date = birth_date_full.split('T')[0]
+                            dob = datetime.datetime.strptime(birth_date, "%Y-%m-%d")
+                            today = datetime.datetime.today()
+                            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                        except Exception:
+                            pass
+                            
+                    account_id = user_obj.get("_id")
+                    
+                    # Process photos
+                    photos_list = user_obj.get("photos", [])
+                    photos_count = len(photos_list)
+                    image_url = image
+                    if photos_list:
+                        # Grab highest resolution of primary photo
+                        primary_files = photos_list[0].get("processedFiles", [])
+                        if primary_files:
+                            sorted_files = sorted(primary_files, key=lambda x: x.get("width", 0), reverse=True)
+                            image_url = sorted_files[0].get("url")
+                            
+                    # Jobs and Schools
+                    jobs_list = []
+                    for j in user_obj.get("jobs", []):
+                        job_title = j.get("title", {}).get("name")
+                        job_company = j.get("company", {}).get("name")
+                        if job_title and job_company:
+                            jobs_list.append(f"{job_title} at {job_company}")
+                        elif job_title:
+                            jobs_list.append(job_title)
+                    jobs = ", ".join(jobs_list) if jobs_list else "Not Specified"
+                    
+                    schools = ", ".join([s.get("name") for s in user_obj.get("schools", []) if s.get("name")]) or "Not Specified"
+                    
+                    # Verification check
+                    badges = user_obj.get("badges", [])
+                    verified = False
+                    for b in badges:
+                        if b.get("type") == "verified" or "verified" in str(b).lower():
+                            verified = True
+                else:
+                    # Fallback Mode
+                    name = title_clean
+                    desc = desc
+                    birth_date = "Hidden"
+                    age = "Unknown"
+                    dob_match = re.search(r'"birth_date":"([^"]+)"', response.text)
+                    if dob_match:
+                        try:
+                            import datetime
+                            birth_date_full = dob_match.group(1)
+                            birth_date = birth_date_full.split('T')[0]
+                            dob = datetime.datetime.strptime(birth_date, "%Y-%m-%d")
+                            today = datetime.datetime.today()
+                            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                        except Exception:
+                            pass
+                    
+                    account_id = None
+                    id_match = re.search(r'"_id":"([a-f0-9]{24})"', response.text)
+                    if id_match:
+                        account_id = id_match.group(1)
                         
-                # Extract Account ID and Creation Date from internal _id
-                # MongoDB ObjectIDs encode creation timestamp in first 4 bytes (8 hex chars)
-                account_id = None
+                    photos_count = "1+"
+                    image_url = image
+                    jobs = "Not Specified"
+                    schools = "Not Specified"
+                    verified = False
+
+                # Calculate Account Registration Age
                 creation_date = "Hidden"
                 account_age = "Unknown"
-                
-                id_match = re.search(r'"_id":"([a-f0-9]{24})"', response.text)
-                if id_match:
-                    account_id = id_match.group(1)
+                if account_id:
                     try:
                         import datetime
                         timestamp = int(account_id[:8], 16)
                         dt = datetime.datetime.fromtimestamp(timestamp, tz=datetime.timezone.utc)
                         creation_date = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
                         
-                        # Calculate age
                         delta = datetime.datetime.now(datetime.timezone.utc) - dt
                         years = delta.days // 365
                         months = (delta.days % 365) // 30
@@ -116,16 +202,15 @@ class TinderClient:
                     "age": age,
                     "birth_date": birth_date,
                     "is_restricted": is_restricted,
-                    "bio": desc,
-                    "image_url": image,
+                    "bio": desc or "No bio written.",
+                    "image_url": image_url,
                     "account_id": account_id or "Hidden",
                     "account_age": account_age,
                     "creation_date": creation_date,
-                    # Below fields are practically impossible to get without auth/matching
-                    "photos_count": "Unknown (Requires Auth)",
-                    "verified": "Unknown (Requires Auth)",
-                    "distance": "Hidden",
-                    "last_active": "Hidden (Removed by Tinder)"
+                    "photos_count": photos_count,
+                    "verified": verified,
+                    "jobs": jobs,
+                    "schools": schools
                 }
                 
             except Exception as e:

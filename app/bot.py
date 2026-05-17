@@ -56,17 +56,23 @@ async def analyze_profile(message: types.Message):
     bot_info = await bot.get_me()
     
     status_str = "⚠️ Account Restrictions (Shadowbanned)" if data.get("is_restricted") else "✅ ACTIVE ACCOUNT"
+    verified_str = "👑 Verified Profile" if data.get("verified") else "❌ Not Verified"
     
     report = (
         f"🔍 <b>[Tinder Analysis Bot]</b>\n\n"
         f"• Account Status: {status_str}\n"
+        f"• Verification: {verified_str}\n"
         f"• Username: @{username}\n"
         f"• Display Name: {data.get('name') or 'N/A'}\n"
         f"• User Age: {data.get('age') or 'Unknown'} years\n"
         f"• Birth Date: {data.get('birth_date') or 'Hidden'}\n"
+        f"• Job/Work: {data.get('jobs') or 'Not Specified'}\n"
+        f"• School/Uni: {data.get('schools') or 'Not Specified'}\n"
+        f"• Total Photos: 📸 {data.get('photos_count') or 'Unknown'} upload(s)\n"
+        f"• Bio: <i>\"{data.get('bio') or 'No bio written.'}\"</i>\n\n"
         f"• Account Age: {data.get('account_age') or 'Unknown'}\n"
         f"• Registration Time: {data.get('creation_date') or 'Unknown'}\n"
-        f"• Account ID: <code>{data.get('account_id') or 'Unknown'}</code>\n"
+        f"• Account ID: <code>{data.get('account_id') or 'Unknown'}</code>\n\n"
         f"Official Link: https://tinder.com/@{username}\n\n"
         f"🤖 Bot: https://t.me/{bot_info.username}"
     )

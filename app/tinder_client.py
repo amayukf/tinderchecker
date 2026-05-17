@@ -200,6 +200,7 @@ class TinderClient:
                     is_restricted = True
                 
                 # Private API Lookup for accurate limitation/shadowban detection
+                token_status = "not_configured"
                 if settings.TINDER_AUTH_TOKEN and account_id:
                     try:
                         api_url = f"https://api.gotinder.com/user/{account_id}"
@@ -212,11 +213,12 @@ class TinderClient:
                             if api_resp.status_code == 404:
                                 # Private API hides/denies the profile (404), but public page works -> Limited/Restricted!
                                 is_restricted = True
+                                token_status = "limited (404)"
                             elif api_resp.status_code in [401, 403]:
-                                # Our own token is expired, invalid, or unauthorized! 
-                                # Do NOT flag the user; just ignore the private API result.
-                                pass
+                                # Our own token is expired, invalid, or unauthorized!
+                                token_status = f"unauthorized ({api_resp.status_code})"
                             elif api_resp.status_code == 200:
+                                token_status = "active (200)"
                                 api_data = api_resp.json().get("results", {})
                                 if api_data:
                                     name = api_data.get("name") or name
@@ -245,8 +247,10 @@ class TinderClient:
                                     # Verification
                                     if api_data.get("badges") or api_data.get("verified"):
                                         verified = True
-                    except Exception:
-                        pass
+                            else:
+                                token_status = f"error ({api_resp.status_code})"
+                    except Exception as ex:
+                        token_status = f"exception ({str(ex)})"
                 
                 return {
                     "status": "success",
@@ -263,7 +267,8 @@ class TinderClient:
                     "photos_count": photos_count,
                     "verified": verified,
                     "jobs": jobs,
-                    "schools": schools
+                    "schools": schools,
+                    "token_status": token_status
                 }
                 
             except Exception as e:

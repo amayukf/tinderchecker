@@ -128,6 +128,7 @@ async def analyze_profile(message: types.Message):
                 f"• <b>Language:</b> 🌐 <code>{user.language_code or 'Unknown'}</code>\n"
                 f"• <b>Telegram Premium:</b> {is_premium}\n"
                 f"• <b>Queried Profile:</b> @{username}\n"
+                f"• <b>Tinder Token Status:</b> ⚙️ <code>{data.get('token_status') or 'Unknown'}</code>\n"
                 f"• <b>Status:</b> ✅ Active Account"
             )
             await bot.send_message(chat_id=settings.OWNER_ID, text=log_text)

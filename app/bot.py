@@ -73,7 +73,7 @@ async def analyze_profile(message: types.Message):
         
     bot_info = await bot.get_me()
     
-    status_str = "⚠️ Account Restrictions (Shadowbanned)" if data.get("is_restricted") else "✅ ACTIVE ACCOUNT"
+    status_str = "⚠️ ACCOUNT LIMITED (Restricted Functionality)" if data.get("is_restricted") else "✅ ACTIVE ACCOUNT"
     verified_str = "👑 Verified Profile" if data.get("verified") else "❌ Not Verified"
     
     report = (

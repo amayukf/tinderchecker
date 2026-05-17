@@ -2,6 +2,7 @@ import httpx
 from bs4 import BeautifulSoup
 import re
 import json
+from app.config import settings
 
 class TinderClient:
     def __init__(self):
@@ -197,6 +198,51 @@ class TinderClient:
                 meta_robots = soup.find("meta", attrs={"name": "robots"})
                 if meta_robots and "noindex" in meta_robots.get("content", "").lower():
                     is_restricted = True
+                
+                # Private API Lookup for accurate limitation/shadowban detection
+                if settings.TINDER_AUTH_TOKEN and account_id:
+                    try:
+                        api_url = f"https://api.gotinder.com/user/{account_id}"
+                        api_headers = {
+                            "X-Auth-Token": settings.TINDER_AUTH_TOKEN,
+                            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+                        }
+                        async with httpx.AsyncClient(timeout=10) as client:
+                            api_resp = await client.get(api_url, headers=api_headers)
+                            if api_resp.status_code in [401, 403, 404]:
+                                # Private API hides/denies the profile, but public page works -> Limited/Restricted!
+                                is_restricted = True
+                            elif api_resp.status_code == 200:
+                                api_data = api_resp.json().get("results", {})
+                                if api_data:
+                                    name = api_data.get("name") or name
+                                    desc = api_data.get("bio") or desc
+                                    
+                                    # Parse exact jobs
+                                    jobs_list = []
+                                    for j in api_data.get("jobs", []):
+                                        job_title = j.get("title", {}).get("name")
+                                        job_company = j.get("company", {}).get("name")
+                                        if job_title and job_company:
+                                            jobs_list.append(f"{job_title} at {job_company}")
+                                        elif job_title:
+                                            jobs_list.append(job_title)
+                                    if jobs_list:
+                                        jobs = ", ".join(jobs_list)
+                                        
+                                    # Parse exact schools
+                                    schools = ", ".join([s.get("name") for s in api_data.get("schools", []) if s.get("name")]) or schools
+                                    
+                                    # Parse exact photos count
+                                    photos_list = api_data.get("photos", [])
+                                    if photos_list:
+                                        photos_count = len(photos_list)
+                                        
+                                    # Verification
+                                    if api_data.get("badges") or api_data.get("verified"):
+                                        verified = True
+                    except Exception:
+                        pass
                 
                 return {
                     "status": "success",

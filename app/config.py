@@ -7,6 +7,7 @@ class Settings(BaseSettings):
     REDIS_URL: str = "redis://redis:6379/0"  # For rate limiting or cache if needed
     ENVIRONMENT: str = "production"
     OWNER_ID: int | None = None
+    TINDER_AUTH_TOKEN: str | None = None
 
     class Config:
         env_file = ".env"

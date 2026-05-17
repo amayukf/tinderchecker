@@ -105,10 +105,15 @@ async def analyze_profile(message: types.Message):
     
     await msg.delete()
     
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Sell This Account", url="https://t.me/T_ump")],
-        [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
-    ])
+    if data.get("is_restricted"):
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
+        ])
+    else:
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🛒 Sell This Account", url="https://t.me/T_ump")],
+            [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
+        ])
     
     # Log success to owner
     if settings.OWNER_ID:

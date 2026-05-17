@@ -50,17 +50,29 @@ class TinderClient:
                 og_image = soup.find("meta", property="og:image")
                 
                 title = og_title["content"] if og_title else ""
-                title = title.replace(" - Tinder", "").replace(" | Tinder", "").strip()
+                # Strip user tag and Tinder branding from title to get clean Display Name
+                title_clean = re.sub(r'\s*\(@[a-zA-Z0-9_]+\)\s*\|\s*Tinder', '', title).strip()
+                title_clean = title_clean.replace(" - Tinder", "").replace(" | Tinder", "").strip()
                 desc = og_desc["content"] if og_desc else ""
                 image = og_image["content"] if og_image else ""
                 
-                # Try to parse name and age from Title (e.g., "John, 25 - Tinder")
-                name, age = None, None
-                title_match = re.match(r"^([^,]+)(?:,\s*(\d+))?", title)
-                if title_match:
-                    name = title_match.group(1).strip()
-                    if title_match.group(2):
-                        age = title_match.group(2)
+                # We extract name
+                name = title_clean
+                
+                # Extract Birth Date and Calculate Age
+                birth_date = "Hidden"
+                age = "Unknown"
+                dob_match = re.search(r'"birth_date":"([^"]+)"', response.text)
+                if dob_match:
+                    try:
+                        import datetime
+                        birth_date_full = dob_match.group(1)
+                        birth_date = birth_date_full.split('T')[0]
+                        dob = datetime.datetime.strptime(birth_date, "%Y-%m-%d")
+                        today = datetime.datetime.today()
+                        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                    except Exception:
+                        pass
                         
                 # Extract Account ID and Creation Date from internal _id
                 # MongoDB ObjectIDs encode creation timestamp in first 4 bytes (8 hex chars)
@@ -91,11 +103,19 @@ class TinderClient:
                     except Exception:
                         pass
                 
+                # Check shadowban status via robots meta tag
+                is_restricted = False
+                meta_robots = soup.find("meta", attrs={"name": "robots"})
+                if meta_robots and "noindex" in meta_robots.get("content", "").lower():
+                    is_restricted = True
+                
                 return {
                     "status": "success",
                     "username": username,
                     "name": name,
                     "age": age,
+                    "birth_date": birth_date,
+                    "is_restricted": is_restricted,
                     "bio": desc,
                     "image_url": image,
                     "account_id": account_id or "Hidden",

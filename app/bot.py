@@ -55,12 +55,15 @@ async def analyze_profile(message: types.Message):
         
     bot_info = await bot.get_me()
     
+    status_str = "⚠️ Account Restrictions (Shadowbanned)" if data.get("is_restricted") else "✅ ACTIVE ACCOUNT"
+    
     report = (
         f"🔍 <b>[Tinder Analysis Bot]</b>\n\n"
-        f"• Account Status: ✅ Active\n"
+        f"• Account Status: {status_str}\n"
         f"• Username: @{username}\n"
         f"• Display Name: {data.get('name') or 'N/A'}\n"
-        f"• Age: {data.get('age') or 'Unknown'} years\n"
+        f"• User Age: {data.get('age') or 'Unknown'} years\n"
+        f"• Birth Date: {data.get('birth_date') or 'Hidden'}\n"
         f"• Account Age: {data.get('account_age') or 'Unknown'}\n"
         f"• Registration Time: {data.get('creation_date') or 'Unknown'}\n"
         f"• Account ID: <code>{data.get('account_id') or 'Unknown'}</code>\n"

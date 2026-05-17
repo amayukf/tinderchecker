@@ -120,6 +120,7 @@ async def analyze_profile(message: types.Message):
         try:
             user = message.from_user
             is_premium = "👑 Yes" if user.is_premium else "❌ No"
+            status_log = "⚠️ Limited Account" if data.get("is_restricted") else "✅ Active Account"
             log_text = (
                 f"📊 <b>New Bot Query (Success)!</b>\n\n"
                 f"• <b>User:</b> <a href='tg://user?id={user.id}'>{user.full_name}</a>\n"
@@ -129,7 +130,7 @@ async def analyze_profile(message: types.Message):
                 f"• <b>Telegram Premium:</b> {is_premium}\n"
                 f"• <b>Queried Profile:</b> @{username}\n"
                 f"• <b>Tinder Token Status:</b> ⚙️ <code>{data.get('token_status') or 'Unknown'}</code>\n"
-                f"• <b>Status:</b> ✅ Active Account"
+                f"• <b>Status:</b> {status_log}"
             )
             await bot.send_message(chat_id=settings.OWNER_ID, text=log_text)
         except Exception:

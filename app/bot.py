@@ -20,8 +20,7 @@ RATE_LIMIT_SECONDS = 5
 async def cmd_start(message: types.Message):
     await message.answer(
         "👋 Welcome to the Tinder Profile Analyzer Bot!\n\n"
-        "Send me a Tinder profile URL (e.g., https://tinder.com/@username) or just a username to get public metadata.\n\n"
-        "<i>Note: I can only fetch publicly available information. Many details are hidden for privacy.</i>"
+        "Send me a Tinder profile URL (e.g., https://tinder.com/@username) or just a username to get public metadata."
     )
 
 @dp.message()

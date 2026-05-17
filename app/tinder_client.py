@@ -50,6 +50,7 @@ class TinderClient:
                 og_image = soup.find("meta", property="og:image")
                 
                 title = og_title["content"] if og_title else ""
+                title = title.replace(" - Tinder", "").replace(" | Tinder", "").strip()
                 desc = og_desc["content"] if og_desc else ""
                 image = og_image["content"] if og_image else ""
                 

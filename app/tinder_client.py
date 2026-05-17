@@ -209,9 +209,13 @@ class TinderClient:
                         }
                         async with httpx.AsyncClient(timeout=10) as client:
                             api_resp = await client.get(api_url, headers=api_headers)
-                            if api_resp.status_code in [401, 403, 404]:
-                                # Private API hides/denies the profile, but public page works -> Limited/Restricted!
+                            if api_resp.status_code == 404:
+                                # Private API hides/denies the profile (404), but public page works -> Limited/Restricted!
                                 is_restricted = True
+                            elif api_resp.status_code in [401, 403]:
+                                # Our own token is expired, invalid, or unauthorized! 
+                                # Do NOT flag the user; just ignore the private API result.
+                                pass
                             elif api_resp.status_code == 200:
                                 api_data = api_resp.json().get("results", {})
                                 if api_data:

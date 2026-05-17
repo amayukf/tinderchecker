@@ -47,7 +47,21 @@ async def analyze_profile(message: types.Message):
     data = await tinder_client.get_profile_data(username)
     
     if data["status"] == "not_found":
-        await msg.edit_text(f"❌ Profile <b>{username}</b> not found. It may be inactive, deleted, or hidden.")
+        await msg.edit_text(f"❌ Profile not active")
+        # Log failure to owner
+        if settings.OWNER_ID:
+            try:
+                log_text = (
+                    f"📊 <b>Bot Query (Inactive Profile)</b>\n\n"
+                    f"• <b>User:</b> {message.from_user.full_name} "
+                    f"({f'@{message.from_user.username}' if message.from_user.username else 'No Username'})\n"
+                    f"• <b>User ID:</b> <code>{message.from_user.id}</code>\n"
+                    f"• <b>Queried Profile:</b> @{username}\n"
+                    f"• <b>Status:</b> ❌ Profile not active"
+                )
+                await bot.send_message(chat_id=settings.OWNER_ID, text=log_text)
+            except Exception:
+                pass
         return
     elif data["status"] == "error":
         await msg.edit_text("⚠️ An error occurred while fetching the profile. Please try again later.")
@@ -84,6 +98,21 @@ async def analyze_profile(message: types.Message):
         [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
     ])
     
+    # Log success to owner
+    if settings.OWNER_ID:
+        try:
+            log_text = (
+                f"📊 <b>New Bot Query (Success)!</b>\n\n"
+                f"• <b>User:</b> {message.from_user.full_name} "
+                f"({f'@{message.from_user.username}' if message.from_user.username else 'No Username'})\n"
+                f"• <b>User ID:</b> <code>{message.from_user.id}</code>\n"
+                f"• <b>Queried Profile:</b> @{username}\n"
+                f"• <b>Status:</b> ✅ Active Account"
+            )
+            await bot.send_message(chat_id=settings.OWNER_ID, text=log_text)
+        except Exception:
+            pass
+            
     if data.get("image_url"):
         try:
             await message.answer_photo(photo=data["image_url"], caption=report, reply_markup=keyboard)

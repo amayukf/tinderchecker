@@ -139,6 +139,9 @@ class TinderClient:
                             verified = True
                 else:
                     # Fallback Mode
+                    if title_clean == "Tinder" or "Dating, Make Friends" in title or "Looking for someone?" in response.text:
+                        return {"status": "not_found"}
+                        
                     name = title_clean
                     desc = desc
                     birth_date = "Hidden"

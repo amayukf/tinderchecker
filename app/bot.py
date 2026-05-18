@@ -26,9 +26,7 @@ async def cmd_start(message: types.Message):
         f"• Real-time Verification & Photo Counts\n"
         f"• Account Creation & ID Statistics\n\n"
         f"👉 <b>How to Use:</b>\n"
-        f"Simply send any Tinder profile link or username to begin:\n"
-        f"<i>Example: <code>flex</code> or <code>https://tinder.com/@flex</code></i>\n\n"
-        f"🤖 <i>Powered by Tinder Private API Core v7</i>"
+        f"Simply send any Tinder profile link or username to begin:"
     )
     
     keyboard = InlineKeyboardMarkup(inline_keyboard=[

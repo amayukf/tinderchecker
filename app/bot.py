@@ -18,9 +18,27 @@ RATE_LIMIT_SECONDS = 5
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
+    welcome_text = (
+        f"🔍 <b>[Tinder Analysis Service]</b>\n\n"
+        f"Welcome to the ultimate Tinder OSINT & profile verification platform!\n\n"
+        f"⚡ <b>Core Features:</b>\n"
+        f"• Accurate Account Status (Active / Limited)\n"
+        f"• Real-time Verification & Photo Counts\n"
+        f"• Account Creation & ID Statistics\n\n"
+        f"👉 <b>How to Use:</b>\n"
+        f"Simply send any Tinder profile link or username to begin:\n"
+        f"<i>Example: <code>flex</code> or <code>https://tinder.com/@flex</code></i>\n\n"
+        f"🤖 <i>Powered by Tinder Private API Core v7</i>"
+    )
+    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
+    ])
+    
     await message.answer(
-        "👋 Welcome to the Tinder Profile Analyzer Bot!\n\n"
-        "Send me a Tinder profile URL (e.g., https://tinder.com/@username) or just a username to get public metadata."
+        welcome_text,
+        reply_markup=keyboard,
+        disable_web_page_preview=True
     )
 
 @dp.message()

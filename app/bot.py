@@ -3,15 +3,19 @@ import time
 import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
-from aiogram.filters import CommandStart
+from aiogram.filters import CommandStart, Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from app.config import settings
 from app.tinder_client import TinderClient
-from app.database import AsyncSessionLocal
+from app.database import AsyncSessionLocal, engine, Base
 from app.models import User, QueryLog
-from sqlalchemy import select
+from sqlalchemy import select, func
 from sqlalchemy.dialects.sqlite import insert
+
+# Import logging
+import logging
+logger = logging.getLogger(__name__)
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
@@ -20,8 +24,16 @@ tinder_client = TinderClient()
 user_rate_limit = {}
 RATE_LIMIT_SECONDS = 5
 
+async def init_db():
+    """Initializes the database tables."""
+    async with engine.begin() as conn:
+        await conn.run_sync(Base.metadata.create_all)
+    logger.info("Database initialized.")
+
 async def register_user(tg_user: types.User):
     """Saves or updates user info in the database."""
+    if not tg_user:
+        return
     async with AsyncSessionLocal() as session:
         stmt = insert(User).values(
             user_id=tg_user.id,
@@ -68,42 +80,69 @@ async def cmd_start(message: types.Message):
         disable_web_page_preview=True
     )
 
+@dp.message(Command("stats"))
+async def cmd_stats(message: types.Message):
+    """Owner-only stats command."""
+    if str(message.from_user.id) != str(settings.OWNER_ID):
+        return
+
+    async with AsyncSessionLocal() as session:
+        user_count = await session.scalar(select(func.count(User.id)))
+        query_count = await session.scalar(select(func.count(QueryLog.id)))
+        
+        # New users in last 24h
+        day_ago = time.time() - 86400
+        # More complex queries could go here
+        
+    await message.answer(
+        f"📊 <b>Bot Statistics:</b>\n\n"
+        f"• Total Users: <code>{user_count}</code>\n"
+        f"• Total Queries: <code>{query_count}</code>"
+    )
+
+@dp.message(Command("broadcast"))
+async def cmd_broadcast(message: types.Message):
+    """Owner-only broadcast command."""
+    if str(message.from_user.id) != str(settings.OWNER_ID):
+        return
+
+    broadcast_msg = message.text.replace("/broadcast", "", 1).strip()
+    reply_msg = message.reply_to_message
+    
+    if not broadcast_msg and not reply_msg:
+        await message.answer("⚠️ Please provide a message or reply to a message to broadcast.")
+        return
+
+    status_msg = await message.answer("📢 <b>Starting broadcast...</b>")
+    
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(select(User.user_id))
+        user_ids = [row[0] for row in result.all()]
+    
+    success = 0
+    failed = 0
+    
+    for uid in user_ids:
+        try:
+            if reply_msg:
+                await bot.copy_message(chat_id=uid, from_chat_id=message.chat.id, message_id=reply_msg.message_id)
+            else:
+                await bot.send_message(chat_id=uid, text=broadcast_msg)
+            success += 1
+            await asyncio.sleep(0.05) # Avoid flood limits
+        except Exception:
+            failed += 1
+    
+    await status_msg.edit_text(
+        f"✅ <b>Broadcast Finished!</b>\n\n"
+        f"• Targeted: {len(user_ids)}\n"
+        f"• Success: {success}\n"
+        f"• Failed: {failed}"
+    )
+
 @dp.message()
 async def handle_message(message: types.Message):
     if not message.text:
-        return
-
-    # Handle Broadcast Command (Owner Only)
-    is_owner = str(message.from_user.id) == str(settings.OWNER_ID)
-    
-    if message.text.startswith("/broadcast") and is_owner:
-        broadcast_msg = message.text.replace("/broadcast", "", 1).strip()
-        if not broadcast_msg:
-            await message.answer("⚠️ Please provide a message to broadcast.")
-            return
-
-        status_msg = await message.answer("📢 <b>Starting broadcast...</b>")
-        
-        async with AsyncSessionLocal() as session:
-            result = await session.execute(select(User.user_id))
-            user_ids = [row[0] for row in result.fetchall()]
-        
-        success = 0
-        failed = 0
-        
-        for uid in user_ids:
-            try:
-                await bot.send_message(chat_id=uid, text=broadcast_msg)
-                success += 1
-                await asyncio.sleep(0.05) # Avoid flood limits
-            except Exception:
-                failed += 1
-        
-        await status_msg.edit_text(
-            f"✅ <b>Broadcast Finished!</b>\n\n"
-            f"• Success: {success}\n"
-            f"• Failed: {failed}"
-        )
         return
 
     await register_user(message.from_user)

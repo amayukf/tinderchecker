@@ -1,17 +1,25 @@
 import os
 from fastapi import FastAPI, Request, Response
 from aiogram import types
-from app.bot import dp, bot
+from app.bot import dp, bot, init_db
 import logging
 
 logging.basicConfig(level=logging.INFO)
 
 app = FastAPI()
 
+# Global variable to track DB initialization
+db_initialized = False
+
 WEBHOOK_PATH = f"/api/webhook"
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
+    global db_initialized
+    if not db_initialized:
+        await init_db()
+        db_initialized = True
+
     """
     Webhook endpoint for Telegram.
     Receives JSON updates from Telegram and feeds them to the aiogram dispatcher.

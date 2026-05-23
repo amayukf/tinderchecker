@@ -34,8 +34,11 @@ async def bot_webhook(request: Request):
         await dp.feed_update(bot=bot, update=update)
         return Response(status_code=200)
     except Exception as e:
-        logging.error(f"Error processing update: {e}")
-        return Response(status_code=500)
+        import traceback
+        error_msg = f"Error processing update: {e}\n{traceback.format_exc()}"
+        logging.error(error_msg)
+        # Return error details in response for debugging (visible in some logs)
+        return Response(content=error_msg, status_code=500)
 
 @app.get("/")
 async def root():

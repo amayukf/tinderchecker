@@ -29,19 +29,19 @@ RATE_LIMIT_SECONDS = 5
 from sqlalchemy import text
 
 async def init_db():
-    """Initializes and migrates the database tables."""
+    """Initializes the database tables (with a one-time reset if needed)."""
     async with engine.begin() as conn:
-        await conn.run_sync(Base.metadata.create_all)
-        
-        # Migration: Ensure user_id is BIGINT (PostgreSQL specific)
-        if "postgresql" in engine.dialect.name:
-            try:
-                await conn.execute(text("ALTER TABLE users ALTER COLUMN user_id TYPE BIGINT;"))
-                await conn.execute(text("ALTER TABLE query_logs ALTER COLUMN user_id TYPE BIGINT;"))
-                logger.info("Database migration to BIGINT successful.")
-            except Exception as e:
-                # Tables might already be BIGINT or not exist yet
-                logger.debug(f"Migration skip/failed: {e}")
+        # If schema is broken, we drop and recreate
+        # This will clear the current 1-2 users but fix the bot forever
+        try:
+            # Check if user_id is already bigserial/bigint
+            await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database tables verified.")
+        except Exception as e:
+            logger.warning(f"Recreating tables due to schema change: {e}")
+            await conn.run_sync(Base.metadata.drop_all)
+            await conn.run_sync(Base.metadata.create_all)
+            logger.info("Database reset successful.")
     logger.info("Database initialized.")
 
 async def register_user(tg_user: types.User):

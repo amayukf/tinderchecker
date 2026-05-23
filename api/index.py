@@ -43,28 +43,4 @@ async def root():
 
 @app.get("/api/health")
 async def health():
-    from app.config import settings
-    from app.database import engine
-    from sqlalchemy import text
-    
-    db_status = "unknown"
-    db_error = None
-    
-    try:
-        async with engine.connect() as conn:
-            await conn.execute(text("SELECT 1"))
-            db_status = "connected"
-    except Exception as e:
-        db_status = "failed"
-        db_error = str(e)
-        
-    return {
-        "status": "ok",
-        "bot_token": settings.TELEGRAM_BOT_TOKEN[:5] + "...",
-        "database": {
-            "status": db_status,
-            "url_masked": settings.DATABASE_URL.split("@")[-1],
-            "error": db_error
-        },
-        "vercel": os.environ.get("VERCEL")
-    }
+    return {"status": "ok"}

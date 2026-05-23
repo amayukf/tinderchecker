@@ -29,19 +29,9 @@ RATE_LIMIT_SECONDS = 5
 from sqlalchemy import text
 
 async def init_db():
-    """Initializes the database tables (with a one-time reset if needed)."""
+    """Initializes the database tables."""
     async with engine.begin() as conn:
-        # If schema is broken, we drop and recreate
-        # This will clear the current 1-2 users but fix the bot forever
-        try:
-            # Check if user_id is already bigserial/bigint
-            await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database tables verified.")
-        except Exception as e:
-            logger.warning(f"Recreating tables due to schema change: {e}")
-            await conn.run_sync(Base.metadata.drop_all)
-            await conn.run_sync(Base.metadata.create_all)
-            logger.info("Database reset successful.")
+        await conn.run_sync(Base.metadata.create_all)
     logger.info("Database initialized.")
 
 async def register_user(tg_user: types.User):
@@ -160,7 +150,7 @@ async def cmd_users(message: types.Message):
     user_list = "👥 <b>Recent Registered Users:</b>\n\n"
     for i, user in enumerate(users, 1):
         username = f"@{user.username}" if user.username else "No Username"
-        user_line = f"{i}. {user.full_name} ({username}) [<code>{user.user_id}</code>]\n"
+        user_line = f"{i}. {user.full_name} ({username})\n"
         
         # Check if message length exceeds Telegram limit
         if len(user_list) + len(user_line) > 4000:

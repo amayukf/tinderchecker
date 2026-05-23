@@ -70,9 +70,14 @@ async def cmd_start(message: types.Message):
 
 @dp.message()
 async def handle_message(message: types.Message):
+    if not message.text:
+        return
+
     # Handle Broadcast Command (Owner Only)
-    if message.text.startswith("/broadcast ") and message.from_user.id == settings.OWNER_ID:
-        broadcast_msg = message.text.replace("/broadcast ", "", 1).strip()
+    is_owner = str(message.from_user.id) == str(settings.OWNER_ID)
+    
+    if message.text.startswith("/broadcast") and is_owner:
+        broadcast_msg = message.text.replace("/broadcast", "", 1).strip()
         if not broadcast_msg:
             await message.answer("⚠️ Please provide a message to broadcast.")
             return

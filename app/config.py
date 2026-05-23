@@ -15,7 +15,18 @@ class Settings(BaseSettings):
 
     def __init__(self, **values):
         super().__init__(**values)
-        if os.getenv("VERCEL") and "sqlite" in self.DATABASE_URL:
-            self.DATABASE_URL = "sqlite+aiosqlite:////tmp/tinder_bot.db"
+        url = self.DATABASE_URL
+        
+        # 1. Neon/Supabase Fix (convert postgres:// to postgresql+asyncpg://)
+        if url.startswith("postgres://"):
+            url = url.replace("postgres://", "postgresql+asyncpg://", 1)
+        elif url.startswith("postgresql://"):
+            url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
+            
+        # 2. Vercel SQLite Fix (use /tmp if using default sqlite)
+        if os.getenv("VERCEL") and "sqlite" in url and "./" in url:
+            url = "sqlite+aiosqlite:////tmp/tinder_bot.db"
+            
+        self.DATABASE_URL = url
 
 settings = Settings()

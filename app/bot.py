@@ -26,10 +26,22 @@ tinder_client = TinderClient()
 user_rate_limit = {}
 RATE_LIMIT_SECONDS = 5
 
+from sqlalchemy import text
+
 async def init_db():
-    """Initializes the database tables."""
+    """Initializes and migrates the database tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        
+        # Migration: Ensure user_id is BIGINT (PostgreSQL specific)
+        if "postgresql" in engine.dialect.name:
+            try:
+                await conn.execute(text("ALTER TABLE users ALTER COLUMN user_id TYPE BIGINT;"))
+                await conn.execute(text("ALTER TABLE query_logs ALTER COLUMN user_id TYPE BIGINT;"))
+                logger.info("Database migration to BIGINT successful.")
+            except Exception as e:
+                # Tables might already be BIGINT or not exist yet
+                logger.debug(f"Migration skip/failed: {e}")
     logger.info("Database initialized.")
 
 async def register_user(tg_user: types.User):

@@ -1,5 +1,6 @@
 import os
 import time
+import asyncio
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart
@@ -7,17 +8,45 @@ from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
 from app.config import settings
 from app.tinder_client import TinderClient
+from app.database import AsyncSessionLocal
+from app.models import User, QueryLog
+from sqlalchemy import select
+from sqlalchemy.dialects.sqlite import insert
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 tinder_client = TinderClient()
 
-# Extremely simple in-memory rate limiting (Note: In Vercel, this is ephemeral per instance)
 user_rate_limit = {}
 RATE_LIMIT_SECONDS = 5
 
+async def register_user(tg_user: types.User):
+    """Saves or updates user info in the database."""
+    async with AsyncSessionLocal() as session:
+        stmt = insert(User).values(
+            user_id=tg_user.id,
+            username=tg_user.username,
+            full_name=tg_user.full_name
+        ).on_conflict_do_update(
+            index_elements=['user_id'],
+            set_={
+                'username': tg_user.username,
+                'full_name': tg_user.full_name
+            }
+        )
+        await session.execute(stmt)
+        await session.commit()
+
+async def log_query(user_id: int, query: str, status: str):
+    """Logs a query to the database."""
+    async with AsyncSessionLocal() as session:
+        log = QueryLog(user_id=user_id, username_or_url=query, status=status)
+        session.add(log)
+        await session.commit()
+
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
+    await register_user(message.from_user)
     welcome_text = (
         f"🔍 <b>[Tinder Analysis Service]</b>\n\n"
         f"Welcome to the ultimate Tinder OSINT & profile verification platform!\n\n"
@@ -40,7 +69,39 @@ async def cmd_start(message: types.Message):
     )
 
 @dp.message()
-async def analyze_profile(message: types.Message):
+async def handle_message(message: types.Message):
+    # Handle Broadcast Command (Owner Only)
+    if message.text.startswith("/broadcast ") and message.from_user.id == settings.OWNER_ID:
+        broadcast_msg = message.text.replace("/broadcast ", "", 1).strip()
+        if not broadcast_msg:
+            await message.answer("⚠️ Please provide a message to broadcast.")
+            return
+
+        status_msg = await message.answer("📢 <b>Starting broadcast...</b>")
+        
+        async with AsyncSessionLocal() as session:
+            result = await session.execute(select(User.user_id))
+            user_ids = [row[0] for row in result.fetchall()]
+        
+        success = 0
+        failed = 0
+        
+        for uid in user_ids:
+            try:
+                await bot.send_message(chat_id=uid, text=broadcast_msg)
+                success += 1
+                await asyncio.sleep(0.05) # Avoid flood limits
+            except Exception:
+                failed += 1
+        
+        await status_msg.edit_text(
+            f"✅ <b>Broadcast Finished!</b>\n\n"
+            f"• Success: {success}\n"
+            f"• Failed: {failed}"
+        )
+        return
+
+    await register_user(message.from_user)
     user_id = message.from_user.id
     
     # Rate Limiting
@@ -63,6 +124,7 @@ async def analyze_profile(message: types.Message):
     data = await tinder_client.get_profile_data(username)
     
     if data["status"] == "not_found":
+        await log_query(user_id, username, "not_found")
         await msg.edit_text(f"❌ Profile not active")
         # Log failure to owner
         if settings.OWNER_ID:
@@ -84,8 +146,11 @@ async def analyze_profile(message: types.Message):
                 pass
         return
     elif data["status"] == "error":
+        await log_query(user_id, username, "error")
         await msg.edit_text("⚠️ An error occurred while fetching the profile. Please try again later.")
         return
+    
+    await log_query(user_id, username, "success")
         
     bot_info = await bot.get_me()
     

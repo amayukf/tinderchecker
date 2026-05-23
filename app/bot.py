@@ -36,40 +36,54 @@ async def register_user(tg_user: types.User):
     """Saves or updates user info in the database."""
     if not tg_user:
         return
-    async with AsyncSessionLocal() as session:
-        user_values = {
-            'user_id': tg_user.id,
-            'username': tg_user.username,
-            'full_name': tg_user.full_name
-        }
-        
-        # Check engine dialect and use appropriate upsert
-        if engine.dialect.name == "postgresql":
-            stmt = pg_insert(User).values(**user_values).on_conflict_do_update(
-                index_elements=['user_id'],
-                set_={
-                    'username': tg_user.username,
-                    'full_name': tg_user.full_name
-                }
-            )
-        else: # Default to SQLite
-            stmt = sqlite_insert(User).values(**user_values).on_conflict_do_update(
-                index_elements=['user_id'],
-                set_={
-                    'username': tg_user.username,
-                    'full_name': tg_user.full_name
-                }
-            )
+    try:
+        async with AsyncSessionLocal() as session:
+            user_values = {
+                'user_id': tg_user.id,
+                'username': tg_user.username,
+                'full_name': tg_user.full_name
+            }
             
-        await session.execute(stmt)
-        await session.commit()
+            # Check engine dialect and use appropriate upsert
+            if "postgresql" in engine.dialect.name:
+                stmt = pg_insert(User).values(**user_values).on_conflict_do_update(
+                    index_elements=['user_id'],
+                    set_={
+                        'username': tg_user.username,
+                        'full_name': tg_user.full_name
+                    }
+                )
+            else: # Default to SQLite
+                stmt = sqlite_insert(User).values(**user_values).on_conflict_do_update(
+                    index_elements=['user_id'],
+                    set_={
+                        'username': tg_user.username,
+                        'full_name': tg_user.full_name
+                    }
+                )
+                
+            await session.execute(stmt)
+            await session.commit()
+    except Exception as e:
+        logger.error(f"register_user failed: {e}")
+        if settings.OWNER_ID:
+            try:
+                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (register_user):</b>\n<code>{str(e)}</code>")
+            except: pass
 
 async def log_query(user_id: int, query: str, status: str):
     """Logs a query to the database."""
-    async with AsyncSessionLocal() as session:
-        log = QueryLog(user_id=user_id, username_or_url=query, status=status)
-        session.add(log)
-        await session.commit()
+    try:
+        async with AsyncSessionLocal() as session:
+            log = QueryLog(user_id=user_id, username_or_url=query, status=status)
+            session.add(log)
+            await session.commit()
+    except Exception as e:
+        logger.error(f"log_query failed: {e}")
+        if settings.OWNER_ID:
+            try:
+                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (log_query):</b>\n<code>{str(e)}</code>")
+            except: pass
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):

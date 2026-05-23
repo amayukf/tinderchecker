@@ -10,8 +10,10 @@ from app.config import settings
 from app.tinder_client import TinderClient
 from app.database import AsyncSessionLocal, engine, Base
 from app.models import User, QueryLog
-from sqlalchemy import select, func
-from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy import select, func, update
+# We'll import both inserts but use them dynamically
+from sqlalchemy.dialects.sqlite import insert as sqlite_insert
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 # Import logging
 import logging
@@ -35,17 +37,30 @@ async def register_user(tg_user: types.User):
     if not tg_user:
         return
     async with AsyncSessionLocal() as session:
-        stmt = insert(User).values(
-            user_id=tg_user.id,
-            username=tg_user.username,
-            full_name=tg_user.full_name
-        ).on_conflict_do_update(
-            index_elements=['user_id'],
-            set_={
-                'username': tg_user.username,
-                'full_name': tg_user.full_name
-            }
-        )
+        user_values = {
+            'user_id': tg_user.id,
+            'username': tg_user.username,
+            'full_name': tg_user.full_name
+        }
+        
+        # Check engine dialect and use appropriate upsert
+        if engine.dialect.name == "postgresql":
+            stmt = pg_insert(User).values(**user_values).on_conflict_do_update(
+                index_elements=['user_id'],
+                set_={
+                    'username': tg_user.username,
+                    'full_name': tg_user.full_name
+                }
+            )
+        else: # Default to SQLite
+            stmt = sqlite_insert(User).values(**user_values).on_conflict_do_update(
+                index_elements=['user_id'],
+                set_={
+                    'username': tg_user.username,
+                    'full_name': tg_user.full_name
+                }
+            )
+            
         await session.execute(stmt)
         await session.commit()
 

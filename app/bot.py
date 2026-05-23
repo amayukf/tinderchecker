@@ -34,7 +34,7 @@ async def init_db():
     logger.info("Database initialized.")
 
 async def register_user(tg_user: types.User):
-    """Saves or updates user info in the database."""
+    """Saves or updates user info in the database (Background task safe)."""
     if not tg_user:
         return
     try:
@@ -44,37 +44,23 @@ async def register_user(tg_user: types.User):
                 'username': tg_user.username,
                 'full_name': tg_user.full_name
             }
-            
-            # Check engine dialect and use appropriate upsert
             if "postgresql" in engine.dialect.name:
                 stmt = pg_insert(User).values(**user_values).on_conflict_do_update(
                     index_elements=['user_id'],
-                    set_={
-                        'username': tg_user.username,
-                        'full_name': tg_user.full_name
-                    }
+                    set_={'username': tg_user.username, 'full_name': tg_user.full_name}
                 )
-            else: # Default to SQLite
+            else:
                 stmt = sqlite_insert(User).values(**user_values).on_conflict_do_update(
                     index_elements=['user_id'],
-                    set_={
-                        'username': tg_user.username,
-                        'full_name': tg_user.full_name
-                    }
+                    set_={'username': tg_user.username, 'full_name': tg_user.full_name}
                 )
-                
             await session.execute(stmt)
             await session.commit()
     except Exception as e:
         logger.error(f"register_user failed: {e}")
-        if settings.OWNER_ID:
-            try:
-                error_clean = html.escape(str(e))
-                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (register_user):</b>\n<code>{error_clean}</code>")
-            except: pass
 
 async def log_query(user_id: int, query: str, status: str):
-    """Logs a query to the database."""
+    """Logs a query to the database (Background task safe)."""
     try:
         async with AsyncSessionLocal() as session:
             log = QueryLog(user_id=user_id, username_or_url=query, status=status)
@@ -82,11 +68,6 @@ async def log_query(user_id: int, query: str, status: str):
             await session.commit()
     except Exception as e:
         logger.error(f"log_query failed: {e}")
-        if settings.OWNER_ID:
-            try:
-                error_clean = html.escape(str(e))
-                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (log_query):</b>\n<code>{error_clean}</code>")
-            except: pass
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -101,15 +82,19 @@ async def cmd_start(message: types.Message):
         f"👉 <b>How to Use:</b>\n"
         f"Simply send any Tinder profile link or username to begin:"
     )
-    
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
-    ])
-    
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]])
+    await message.answer(welcome_text, reply_markup=keyboard, disable_web_page_preview=True)
+
+@dp.message(Command("debug"))
+async def cmd_debug(message: types.Message):
+    """Diagnostic command to check IDs."""
+    is_owner = str(message.from_user.id) == str(settings.OWNER_ID)
+    status = "✅ Owner" if is_owner else "❌ User"
     await message.answer(
-        welcome_text,
-        reply_markup=keyboard,
-        disable_web_page_preview=True
+        f"🛠️ <b>Debug Info:</b>\n"
+        f"• Your ID: <code>{message.from_user.id}</code>\n"
+        f"• Owner ID: <code>{settings.OWNER_ID}</code>\n"
+        f"• Status: {status}"
     )
 
 @dp.message(Command("stats"))
@@ -117,16 +102,13 @@ async def cmd_stats(message: types.Message):
     """Owner-only stats command."""
     if str(message.from_user.id) != str(settings.OWNER_ID):
         return
-
-    async with AsyncSessionLocal() as session:
-        user_count = await session.scalar(select(func.count(User.id)))
-        query_count = await session.scalar(select(func.count(QueryLog.id)))
-        
-    await message.answer(
-        f"📊 <b>Bot Statistics:</b>\n\n"
-        f"• Total Users: <code>{user_count}</code>\n"
-        f"• Total Queries: <code>{query_count}</code>"
-    )
+    try:
+        async with AsyncSessionLocal() as session:
+            user_count = await session.scalar(select(func.count(User.id)))
+            query_count = await session.scalar(select(func.count(QueryLog.id)))
+        await message.answer(f"📊 <b>Bot Statistics:</b>\n\n• Total Users: <code>{user_count}</code>\n• Total Queries: <code>{query_count}</code>")
+    except Exception as e:
+        await message.answer(f"❌ DB Error: {html.escape(str(e))}")
 
 @dp.message(Command("users"))
 async def cmd_users(message: types.Message):

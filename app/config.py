@@ -6,7 +6,7 @@ class Settings(BaseSettings):
     DATABASE_URL: str = os.getenv("DATABASE_URL", "sqlite+aiosqlite:///./tinder_bot.db")
     REDIS_URL: str = "redis://redis:6379/0"
     ENVIRONMENT: str = "production"
-    OWNER_ID: int | None = None
+    OWNER_ID: str | None = None
     TINDER_AUTH_TOKEN: str | None = None
 
     class Config:

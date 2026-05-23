@@ -1,6 +1,8 @@
 import os
 import time
 import asyncio
+import logging
+import html
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
 from aiogram.filters import CommandStart, Command
@@ -10,13 +12,10 @@ from app.config import settings
 from app.tinder_client import TinderClient
 from app.database import AsyncSessionLocal, engine, Base
 from app.models import User, QueryLog
-from sqlalchemy import select, func, update
-# We'll import both inserts but use them dynamically
+from sqlalchemy import select, func, update, text
 from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 
-# Import logging
-import logging
 logger = logging.getLogger(__name__)
 
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
@@ -70,7 +69,8 @@ async def register_user(tg_user: types.User):
         logger.error(f"register_user failed: {e}")
         if settings.OWNER_ID:
             try:
-                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (register_user):</b>\n<code>{str(e)}</code>")
+                error_clean = html.escape(str(e))
+                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (register_user):</b>\n<code>{error_clean}</code>")
             except: pass
 
 async def log_query(user_id: int, query: str, status: str):
@@ -84,7 +84,8 @@ async def log_query(user_id: int, query: str, status: str):
         logger.error(f"log_query failed: {e}")
         if settings.OWNER_ID:
             try:
-                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (log_query):</b>\n<code>{str(e)}</code>")
+                error_clean = html.escape(str(e))
+                await bot.send_message(settings.OWNER_ID, f"❌ <b>Database Error (log_query):</b>\n<code>{error_clean}</code>")
             except: pass
 
 @dp.message(CommandStart())
@@ -121,10 +122,6 @@ async def cmd_stats(message: types.Message):
         user_count = await session.scalar(select(func.count(User.id)))
         query_count = await session.scalar(select(func.count(QueryLog.id)))
         
-        # New users in last 24h
-        day_ago = time.time() - 86400
-        # More complex queries could go here
-        
     await message.answer(
         f"📊 <b>Bot Statistics:</b>\n\n"
         f"• Total Users: <code>{user_count}</code>\n"
@@ -149,8 +146,9 @@ async def cmd_users(message: types.Message):
         
     user_list = "👥 <b>Recent Registered Users:</b>\n\n"
     for i, user in enumerate(users, 1):
-        username = f"@{user.username}" if user.username else "No Username"
-        user_line = f"{i}. {user.full_name} ({username})\n"
+        name_clean = html.escape(user.full_name or "Unknown")
+        user_clean = html.escape(user.username or "No Username")
+        user_line = f"{i}. {name_clean} (@{user_clean})\n"
         
         # Check if message length exceeds Telegram limit
         if len(user_list) + len(user_line) > 4000:
@@ -178,7 +176,7 @@ async def cmd_broadcast(message: types.Message):
         result = await session.execute(select(User.user_id))
         user_ids = [row[0] for row in result.all()]
     
-    success = 0
+    success = success_count = 0
     failed = 0
     
     for uid in user_ids:
@@ -187,7 +185,7 @@ async def cmd_broadcast(message: types.Message):
                 await bot.copy_message(chat_id=uid, from_chat_id=message.chat.id, message_id=reply_msg.message_id)
             else:
                 await bot.send_message(chat_id=uid, text=broadcast_msg)
-            success += 1
+            success_count += 1
             await asyncio.sleep(0.05) # Avoid flood limits
         except Exception:
             failed += 1
@@ -195,7 +193,7 @@ async def cmd_broadcast(message: types.Message):
     await status_msg.edit_text(
         f"✅ <b>Broadcast Finished!</b>\n\n"
         f"• Targeted: {len(user_ids)}\n"
-        f"• Success: {success}\n"
+        f"• Success: {success_count}\n"
         f"• Failed: {failed}"
     )
 
@@ -222,7 +220,7 @@ async def handle_message(message: types.Message):
         await message.answer("❌ Invalid format. Please send a valid Tinder URL or username.")
         return
 
-    msg = await message.answer(f"🔍 Analyzing profile for <b>{username}</b>...")
+    msg = await message.answer(f"🔍 Analyzing profile for <b>{html.escape(username)}</b>...")
     
     data = await tinder_client.get_profile_data(username)
     
@@ -230,18 +228,20 @@ async def handle_message(message: types.Message):
         await log_query(user_id, username, "not_found")
         await msg.edit_text(f"❌ Profile not active")
         # Log failure to owner
-        if settings.OWNER_ID:
+        if settings.OWNER_ID and str(user_id) != str(settings.OWNER_ID):
             try:
                 user = message.from_user
+                name_clean = html.escape(user.full_name or "Unknown")
+                user_clean = html.escape(user.username or "No Username")
                 is_premium = "👑 Yes" if user.is_premium else "❌ No"
                 log_text = (
                     f"📊 <b>Bot Query (Inactive Profile)</b>\n\n"
-                    f"• <b>User:</b> <a href='tg://user?id={user.id}'>{user.full_name}</a>\n"
-                    f"• <b>Username:</b> {f'@{user.username}' if user.username else 'No Username'}\n"
+                    f"• <b>User:</b> <a href='tg://user?id={user.id}'>{name_clean}</a>\n"
+                    f"• <b>Username:</b> @{user_clean}\n"
                     f"• <b>User ID:</b> <code>{user.id}</code>\n"
-                    f"• <b>Language:</b> 🌐 <code>{user.language_code or 'Unknown'}</code>\n"
+                    f"• <b>Language:</b> 🌐 <code>{html.escape(user.language_code or 'Unknown')}</code>\n"
                     f"• <b>Telegram Premium:</b> {is_premium}\n"
-                    f"• <b>Queried Profile:</b> @{username}\n"
+                    f"• <b>Queried Profile:</b> @{html.escape(username)}\n"
                     f"• <b>Status:</b> ❌ Profile not active"
                 )
                 await bot.send_message(chat_id=settings.OWNER_ID, text=log_text)
@@ -260,7 +260,7 @@ async def handle_message(message: types.Message):
     if data.get("is_restricted"):
         report = (
             f"⚠️ <b>Account Limited</b>\n\n"
-            f"👤 <b>Username:</b> @{username}\n"
+            f"👤 <b>Username:</b> @{html.escape(username)}\n"
             f"⚠️ <b>Status:</b> Limited Account\n\n"
             f"⚠️ <b>This account has restricted functionality</b>"
         )
@@ -272,18 +272,18 @@ async def handle_message(message: types.Message):
             f"🔍 <b>[Tinder Analysis Bot]</b>\n\n"
             f"• Account Status: {status_str}\n"
             f"• Verification: {verified_str}\n"
-            f"• Username: @{username}\n"
-            f"• Display Name: {data.get('name') or 'N/A'}\n"
+            f"• Username: @{html.escape(username)}\n"
+            f"• Display Name: {html.escape(data.get('name') or 'N/A')}\n"
             f"• User Age: {data.get('age') or 'Unknown'} years\n"
-            f"• Birth Date: {data.get('birth_date') or 'Hidden'}\n"
-            f"• Job/Work: {data.get('jobs') or 'Not Specified'}\n"
-            f"• School/Uni: {data.get('schools') or 'Not Specified'}\n"
+            f"• Birth Date: {html.escape(data.get('birth_date') or 'Hidden')}\n"
+            f"• Job/Work: {html.escape(data.get('jobs') or 'Not Specified')}\n"
+            f"• School/Uni: {html.escape(data.get('schools') or 'Not Specified')}\n"
             f"• Total Photos: 📸 {data.get('photos_count') or 'Unknown'} upload(s)\n"
-            f"• Bio: <i>\"{data.get('bio') or 'No bio written.'}\"</i>\n\n"
-            f"• Account Age: {data.get('account_age') or 'Unknown'}\n"
-            f"• Registration Time: {data.get('creation_date') or 'Unknown'}\n"
-            f"• Account ID: <code>{data.get('account_id') or 'Unknown'}</code>\n\n"
-            f"Official Link: https://tinder.com/@{username}\n\n"
+            f"• Bio: <i>\"{html.escape(data.get('bio') or 'No bio written.')}\"</i>\n\n"
+            f"• Account Age: {html.escape(data.get('account_age') or 'Unknown')}\n"
+            f"• Registration Time: {html.escape(data.get('creation_date') or 'Unknown')}\n"
+            f"• Account ID: <code>{html.escape(data.get('account_id') or 'Unknown')}</code>\n\n"
+            f"Official Link: https://tinder.com/@{html.escape(username)}\n\n"
             f"🤖 Bot: https://t.me/{bot_info.username}"
         )
     
@@ -299,20 +299,22 @@ async def handle_message(message: types.Message):
             [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
         ])
     
-    # Log success to owner
-    if settings.OWNER_ID:
+    # Log success to owner (Only if not owner themselves)
+    if settings.OWNER_ID and str(user_id) != str(settings.OWNER_ID):
         try:
             user = message.from_user
+            name_clean = html.escape(user.full_name or "Unknown")
+            user_clean = html.escape(user.username or "No Username")
             is_premium = "👑 Yes" if user.is_premium else "❌ No"
             status_log = "⚠️ Limited Account" if data.get("is_restricted") else "✅ Active Account"
             log_text = (
                 f"📊 <b>New Bot Query (Success)!</b>\n\n"
-                f"• <b>User:</b> <a href='tg://user?id={user.id}'>{user.full_name}</a>\n"
-                f"• <b>Username:</b> {f'@{user.username}' if user.username else 'No Username'}\n"
+                f"• <b>User:</b> <a href='tg://user?id={user.id}'>{name_clean}</a>\n"
+                f"• <b>Username:</b> @{user_clean}\n"
                 f"• <b>User ID:</b> <code>{user.id}</code>\n"
-                f"• <b>Language:</b> 🌐 <code>{user.language_code or 'Unknown'}</code>\n"
+                f"• <b>Language:</b> 🌐 <code>{html.escape(user.language_code or 'Unknown')}</code>\n"
                 f"• <b>Telegram Premium:</b> {is_premium}\n"
-                f"• <b>Queried Profile:</b> @{username}\n"
+                f"• <b>Queried Profile:</b> @{html.escape(username)}\n"
                 f"• <b>Tinder Token Status:</b> ⚙️ <code>{data.get('token_status') or 'Unknown'}</code>\n"
                 f"• <b>Status:</b> {status_log}"
             )

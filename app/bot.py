@@ -129,6 +129,34 @@ async def cmd_stats(message: types.Message):
         f"• Total Queries: <code>{query_count}</code>"
     )
 
+@dp.message(Command("users"))
+async def cmd_users(message: types.Message):
+    """Owner-only users list command."""
+    if str(message.from_user.id) != str(settings.OWNER_ID):
+        return
+
+    async with AsyncSessionLocal() as session:
+        result = await session.execute(
+            select(User).order_by(User.id.desc()).limit(50)
+        )
+        users = result.scalars().all()
+        
+    if not users:
+        await message.answer("📝 No users registered yet.")
+        return
+        
+    user_list = "👥 <b>Recent Registered Users:</b>\n\n"
+    for i, user in enumerate(users, 1):
+        username = f"@{user.username}" if user.username else "No Username"
+        user_line = f"{i}. {user.full_name} ({username}) [<code>{user.user_id}</code>]\n"
+        
+        # Check if message length exceeds Telegram limit
+        if len(user_list) + len(user_line) > 4000:
+            break
+        user_list += user_line
+        
+    await message.answer(user_list)
+
 @dp.message(Command("broadcast"))
 async def cmd_broadcast(message: types.Message):
     """Owner-only broadcast command."""

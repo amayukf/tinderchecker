@@ -71,7 +71,10 @@ async def log_query(user_id: int, query: str, status: str):
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
-    await register_user(message.from_user)
+    try:
+        await register_user(message.from_user)
+    except Exception as e:
+        logger.error(f"register_user in cmd_start failed: {e}")
     welcome_text = (
         f"🔍 <b>[Tinder Analysis Service]</b>\n\n"
         f"Welcome to the ultimate Tinder OSINT & profile verification platform!\n\n"
@@ -87,15 +90,20 @@ async def cmd_start(message: types.Message):
 
 @dp.message(Command("debug"))
 async def cmd_debug(message: types.Message):
-    """Diagnostic command to check IDs."""
-    is_owner = str(message.from_user.id) == str(settings.OWNER_ID)
-    status = "✅ Owner" if is_owner else "❌ User"
-    await message.answer(
-        f"🛠️ <b>Debug Info:</b>\n"
-        f"• Your ID: <code>{message.from_user.id}</code>\n"
-        f"• Owner ID: <code>{settings.OWNER_ID}</code>\n"
-        f"• Status: {status}"
-    )
+    """Owner-only diagnostic command."""
+    if str(message.from_user.id) != str(settings.OWNER_ID):
+        return
+    try:
+        is_owner = str(message.from_user.id) == str(settings.OWNER_ID)
+        status = "✅ Owner" if is_owner else "❌ User"
+        await message.answer(
+            f"🛠️ <b>Debug Info:</b>\n"
+            f"• Your ID: <code>{message.from_user.id}</code>\n"
+            f"• Owner ID in config: <code>{settings.OWNER_ID}</code>\n"
+            f"• Match: {status}"
+        )
+    except Exception as e:
+        logger.error(f"cmd_debug error: {e}")
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
@@ -126,18 +134,18 @@ async def cmd_users(message: types.Message):
         await message.answer("📝 No users registered yet.")
         return
         
-    user_list = "👥 <b>Recent Registered Users:</b>\n\n"
-    for i, user in enumerate(users, 1):
-        name_clean = html.escape(user.full_name or "Unknown")
-        user_clean = html.escape(user.username or "No Username")
-        user_line = f"{i}. {name_clean} (@{user_clean})\n"
-        
-        # Check if message length exceeds Telegram limit
-        if len(user_list) + len(user_line) > 4000:
-            break
-        user_list += user_line
-        
-    await message.answer(user_list)
+    try:
+        user_list = "👥 <b>Recent Registered Users:</b>\n\n"
+        for i, user in enumerate(users, 1):
+            name_clean = html.escape(user.full_name or "Unknown")
+            user_clean = html.escape(user.username or "No Username")
+            user_line = f"{i}. {name_clean} (@{user_clean})\n"
+            if len(user_list) + len(user_line) > 4000:
+                break
+            user_list += user_line
+        await message.answer(user_list)
+    except Exception as e:
+        await message.answer(f"❌ Error building list: {html.escape(str(e))}")
 
 @dp.message(Command("broadcast"))
 async def cmd_broadcast(message: types.Message):

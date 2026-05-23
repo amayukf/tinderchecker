@@ -15,15 +15,19 @@ WEBHOOK_PATH = f"/api/webhook"
 
 @app.post(WEBHOOK_PATH)
 async def bot_webhook(request: Request):
-    global db_initialized
-    if not db_initialized:
-        await init_db()
-        db_initialized = True
-
     """
     Webhook endpoint for Telegram.
     Receives JSON updates from Telegram and feeds them to the aiogram dispatcher.
     """
+    global db_initialized
+    if not db_initialized:
+        try:
+            await init_db()
+            db_initialized = True
+        except Exception as e:
+            logging.error(f"Database initialization failed: {e}")
+            # We don't return 500 yet, maybe it works anyway if tables exist
+
     try:
         update_data = await request.json()
         update = types.Update(**update_data)
@@ -39,4 +43,10 @@ async def root():
 
 @app.get("/api/health")
 async def health():
-    return {"status": "ok"}
+    from app.config import settings
+    return {
+        "status": "ok",
+        "database": settings.DATABASE_URL.split("@")[-1], # Mask credentials if any
+        "owner": settings.OWNER_ID,
+        "vercel": os.environ.get("VERCEL")
+    }

@@ -23,7 +23,12 @@ class Settings(BaseSettings):
         elif url.startswith("postgresql://"):
             url = url.replace("postgresql://", "postgresql+asyncpg://", 1)
             
-        # 2. Vercel SQLite Fix (use /tmp if using default sqlite)
+        # 2. Heavy Sanitization: Remove query parameters like ?sslmode=...
+        # asyncpg doesn't support these in the URL string
+        if "+asyncpg://" in url and "?" in url:
+            url = url.split("?")[0]
+
+        # 3. Vercel SQLite Fix (use /tmp if using default sqlite)
         if os.getenv("VERCEL") and "sqlite" in url and "./" in url:
             url = "sqlite+aiosqlite:////tmp/tinder_bot.db"
             

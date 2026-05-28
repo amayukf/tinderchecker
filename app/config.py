@@ -9,6 +9,13 @@ class Settings(BaseSettings):
     OWNER_ID: str | None = None
     TINDER_AUTH_TOKEN: str | None = None
 
+    @property
+    def admin_list(self) -> list[str]:
+        """Returns a list of authorized admin/owner IDs."""
+        if not self.OWNER_ID:
+            return []
+        return [admin_id.strip() for admin_id in self.OWNER_ID.split(",") if admin_id.strip()]
+
     class Config:
         env_file = ".env"
         extra = "allow"

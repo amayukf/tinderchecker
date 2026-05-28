@@ -58,6 +58,12 @@ async def register_user(tg_user: types.User):
             await session.commit()
     except Exception as e:
         logger.error(f"register_user failed: {e}")
+        if settings.admin_list:
+            try:
+                primary_owner = settings.admin_list[0]
+                error_clean = html.escape(str(e))
+                await bot.send_message(primary_owner, f"❌ <b>Database Error (register_user):</b>\n<code>{error_clean}</code>")
+            except: pass
 
 async def log_query(user_id: int, query: str, status: str):
     """Logs a query to the database (Background task safe)."""
@@ -68,6 +74,12 @@ async def log_query(user_id: int, query: str, status: str):
             await session.commit()
     except Exception as e:
         logger.error(f"log_query failed: {e}")
+        if settings.admin_list:
+            try:
+                primary_owner = settings.admin_list[0]
+                error_clean = html.escape(str(e))
+                await bot.send_message(primary_owner, f"❌ <b>Database Error (log_query):</b>\n<code>{error_clean}</code>")
+            except: pass
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -91,7 +103,7 @@ async def cmd_start(message: types.Message):
 @dp.message(Command("debug"))
 async def cmd_debug(message: types.Message):
     """Owner-only diagnostic command."""
-    if str(message.from_user.id) != str(settings.OWNER_ID):
+    if str(message.from_user.id) not in settings.admin_list:
         return
     try:
         is_owner = str(message.from_user.id) == str(settings.OWNER_ID)
@@ -108,7 +120,7 @@ async def cmd_debug(message: types.Message):
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
     """Owner-only stats command."""
-    if str(message.from_user.id) != str(settings.OWNER_ID):
+    if str(message.from_user.id) not in settings.admin_list:
         return
     try:
         async with AsyncSessionLocal() as session:
@@ -121,7 +133,7 @@ async def cmd_stats(message: types.Message):
 @dp.message(Command("users"))
 async def cmd_users(message: types.Message):
     """Owner-only users list command."""
-    if str(message.from_user.id) != str(settings.OWNER_ID):
+    if str(message.from_user.id) not in settings.admin_list:
         return
 
     async with AsyncSessionLocal() as session:
@@ -150,7 +162,7 @@ async def cmd_users(message: types.Message):
 @dp.message(Command("broadcast"))
 async def cmd_broadcast(message: types.Message):
     """Owner-only broadcast command."""
-    if str(message.from_user.id) != str(settings.OWNER_ID):
+    if str(message.from_user.id) not in settings.admin_list:
         return
 
     broadcast_msg = message.text.replace("/broadcast", "", 1).strip()
@@ -218,9 +230,10 @@ async def handle_message(message: types.Message):
         await log_query(user_id, username, "not_found")
         await msg.edit_text(f"❌ Profile not active")
         # Log failure to owner
-        if settings.OWNER_ID and str(user_id) != str(settings.OWNER_ID):
+        if settings.admin_list and str(user_id) not in settings.admin_list:
             try:
-                user = message.from_user
+                # Always send notification to the primary owner (first ID in list)
+                primary_owner = settings.admin_list[0]
                 name_clean = html.escape(user.full_name or "Unknown")
                 user_clean = html.escape(user.username or "No Username")
                 is_premium = "👑 Yes" if user.is_premium else "❌ No"
@@ -234,7 +247,7 @@ async def handle_message(message: types.Message):
                     f"• <b>Queried Profile:</b> @{html.escape(username)}\n"
                     f"• <b>Status:</b> ❌ Profile not active"
                 )
-                await bot.send_message(chat_id=settings.OWNER_ID, text=log_text)
+                await bot.send_message(chat_id=primary_owner, text=log_text)
             except Exception:
                 pass
         return
@@ -289,9 +302,10 @@ async def handle_message(message: types.Message):
             [InlineKeyboardButton(text="📢 Join", url="https://t.me/N_Notic")]
         ])
     
-    # Log success to owner (Only if not owner themselves)
-    if settings.OWNER_ID and str(user_id) != str(settings.OWNER_ID):
+    # Log success to owner (Only if not an admin themselves)
+    if settings.admin_list and str(user_id) not in settings.admin_list:
         try:
+            primary_owner = settings.admin_list[0]
             user = message.from_user
             name_clean = html.escape(user.full_name or "Unknown")
             user_clean = html.escape(user.username or "No Username")
@@ -308,7 +322,7 @@ async def handle_message(message: types.Message):
                 f"• <b>Tinder Token Status:</b> ⚙️ <code>{data.get('token_status') or 'Unknown'}</code>\n"
                 f"• <b>Status:</b> {status_log}"
             )
-            await bot.send_message(chat_id=settings.OWNER_ID, text=log_text)
+            await bot.send_message(chat_id=primary_owner, text=log_text)
         except Exception:
             pass
             

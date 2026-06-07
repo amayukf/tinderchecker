@@ -5,8 +5,9 @@ import asyncio
 import logging
 import html
 import datetime
+import io
 from aiogram import Bot, Dispatcher, types
-from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton
+from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.filters import CommandStart, Command
 from aiogram.enums import ParseMode
 from aiogram.client.default import DefaultBotProperties
@@ -159,7 +160,7 @@ async def cmd_users(message: types.Message):
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            select(User).order_by(User.id.desc()).limit(50)
+            select(User).order_by(User.id.asc()) # Ascending to show oldest first in file
         )
         users = result.scalars().all()
         
@@ -168,17 +169,21 @@ async def cmd_users(message: types.Message):
         return
         
     try:
-        user_list = "👥 <b>Recent Registered Users:</b>\n\n"
+        # Build text for file
+        file_content = "👥 TINDER BOT REGISTERED USERS\n" + "="*30 + "\n\n"
         for i, user in enumerate(users, 1):
-            name_clean = html.escape(user.full_name or "Unknown")
-            user_clean = html.escape(user.username or "No Username")
-            user_line = f"{i}. {name_clean} (@{user_clean})\n"
-            if len(user_list) + len(user_line) > 4000:
-                break
-            user_list += user_line
-        await message.answer(user_list)
+            name = user.full_name or "Unknown"
+            username = user.username or "No Username"
+            file_content += f"{i}. {name} (@{username}) | ID: {user.user_id}\n"
+            
+        # Send as document to avoid message character limits
+        text_file = BufferedInputFile(file_content.encode("utf-8"), filename="users_list.txt")
+        await message.answer_document(
+            document=text_file, 
+            caption=f"✅ <b>Total Users Found:</b> <code>{len(users)}</code>\n\nFull user list generated successfully."
+        )
     except Exception as e:
-        await message.answer(f"❌ Error building list: {html.escape(str(e))}")
+        await message.answer(f"❌ Error exporting list: {html.escape(str(e))}")
 
 @dp.message(Command("broadcast"))
 async def cmd_broadcast(message: types.Message):

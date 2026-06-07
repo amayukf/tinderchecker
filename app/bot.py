@@ -111,7 +111,7 @@ async def cmd_start(message: types.Message):
     except Exception as e:
         logger.error(f"register_user in cmd_start failed: {e}")
     welcome_text = (
-        f"� <b>Welcome to Premium Tinder Checker!</b> 🔥\n\n"
+        f"🔥 <b>Welcome to Premium Tinder Checker!</b> 🔥\n\n"
         f"🎯 Send me any Tinder username to check.\n\n"
         f"<i>Examples:</i>\n"
         f"• boy\n"

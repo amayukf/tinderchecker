@@ -283,10 +283,10 @@ async def handle_message(message: types.Message):
 
     if data.get("is_restricted"):
         report = (
-            f"� <b>Username:</b> {html.escape(username)}\n"
-            f"� <b>Status:</b> LIMITED / SHADOWBANNED\n"
-            f"🌸 <b>Name:</b> {html.escape(data.get('name') or 'Hidden')}\n"
-            f"⛔ <b>Discovery:</b> Not visible on Tinder"
+            f"\U0001f338 <b>{html.escape(data.get('name') or 'Hidden')}</b>\n"
+            f"<code>@{html.escape(username)}</code>\n\n"
+            f"\U0001f6a8 <b>LIMITED / SHADOWBANNED</b>\n"
+            f"\u26d4 <b>Hidden Discovery</b>"
         )
     else:
         reg_year = ""
@@ -294,23 +294,23 @@ async def handle_message(message: types.Message):
         if creation_date_val and creation_date_val != "Hidden":
             reg_year = creation_date_val[:4]
 
-        verified_val = "💎 YES" if data.get("verified") else "🚫 NO"
+        verified_val = "\U0001f48e YES" if data.get("verified") else "\U0001f6ab NO"
         bio_val = (data.get('bio') or "").strip()
         bio_val = bio_val if bio_val and bio_val != "No bio written." else None
 
         bio_preview = bio_val[:120] + ('...' if len(bio_val) > 120 else '') if bio_val else "No bio written."
 
         report = (
-            f"🔮 <b>Username:</b> {html.escape(username)}\n"
-            f"⚡ <b>Status:</b> ACTIVE\n"
-            f"🌸 <b>Name:</b> {html.escape(data.get('name') or 'N/A')}\n"
-            f"🎯 <b>Age:</b> {data.get('age') or 'Unknown'}\n"
-            f"�️ <b>Created:</b> {html.escape(creation_date_val or 'Unknown')}\n"
-            f"📌 <b>Year:</b> {reg_year or 'Unknown'}\n"
-            f"�️ <b>Photos:</b> {data.get('photos_count') or 'Unknown'}\n"
-            f"�️ <b>Verified:</b> {verified_val}\n"
-            f"⌛ <b>Account Age:</b> {html.escape(data.get('account_age') or 'Unknown')}\n"
-            f"�️ <b>Bio:</b> <i>{html.escape(bio_preview)}</i>"
+            f"\U0001f338 <b>{html.escape(data.get('name') or 'N/A')}</b>\n"
+            f"<code>@{html.escape(username)}</code>\n\n"
+            f"\u26a1 <b>ACTIVE</b>\n"
+            f"\U0001f3af <b>{data.get('age') or 'Unknown'} Years Old</b>\n"
+            f"\u231b <b>{html.escape(creation_date_val or 'Unknown')}</b>\n"
+            f"\U0001f4cc <b>Registered in {reg_year or 'Unknown'}</b>\n"
+            f"\U0001f5bc\ufe0f <b>{data.get('photos_count') or 'Unknown'} Photos</b>\n"
+            f"\U0001f6e1\ufe0f <b>Verified: {verified_val}</b>\n"
+            f"\u231b <b>Age: {html.escape(data.get('account_age') or 'Unknown')}</b>\n\n"
+            f"\U0001f5e3\ufe0f <i>{html.escape(bio_preview)}</i>"
         )
     
     await msg.delete()

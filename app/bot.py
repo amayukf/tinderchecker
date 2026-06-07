@@ -257,21 +257,13 @@ async def handle_message(message: types.Message):
     await log_query(user_id, username, "success")
         
     bot_info = await bot.get_me()
-    
-    # ── Build the report ────────────────────────────────────────────
-    DIVIDER   = "─" * 22
-    FOOTER_FX = "💫" * 11
 
     if data.get("is_restricted"):
         report = (
-            f"🎀 <b>TINDER CHECK RESULT</b> 🎀\n"
-            f"{DIVIDER}\n\n"
             f"👑 <b>Username:</b> {html.escape(username)}\n"
-            f"🚫 <b>Status:</b> <b>LIMITED / SHADOWBANNED</b>\n"
+            f"🚫 <b>Status:</b> LIMITED / SHADOWBANNED\n"
             f"👤 <b>Name:</b> {html.escape(data.get('name') or 'Hidden')}\n"
-            f"🔒 <b>Discovery:</b> Not visible on Tinder\n\n"
-            f"{DIVIDER}\n"
-            f"{FOOTER_FX}"
+            f"🔒 <b>Discovery:</b> Not visible on Tinder"
         )
     else:
         reg_year = ""
@@ -279,21 +271,18 @@ async def handle_message(message: types.Message):
         if creation_date_val and creation_date_val != "Hidden":
             reg_year = creation_date_val[:4]
 
-        verified_icon = "✅" if data.get("verified") else "❌"
+        verified_val = "✅ YES" if data.get("verified") else "❌ NO"
         bio_val = (data.get('bio') or "").strip()
         bio_val = bio_val if bio_val and bio_val != "No bio written." else None
 
-        # Optional lines — only shown when data exists
-        job_line = f"💼 <b>Job:</b> {html.escape(data.get('jobs', ''))}\n" if data.get('jobs') and data.get('jobs') != 'Not Specified' else ""
+        job_line    = f"💼 <b>Job:</b> {html.escape(data.get('jobs', ''))}\n"    if data.get('jobs')    and data.get('jobs')    != 'Not Specified' else ""
         school_line = f"🎓 <b>School:</b> {html.escape(data.get('schools', ''))}\n" if data.get('schools') and data.get('schools') != 'Not Specified' else ""
         bio_preview = bio_val[:80] + ('...' if len(bio_val) > 80 else '') if bio_val else ""
-        bio_line = f"💬 <b>Bio:</b> <i>{html.escape(bio_preview)}</i>\n" if bio_val else ""
+        bio_line    = f"💬 <b>Bio:</b> <i>{html.escape(bio_preview)}</i>\n"      if bio_val else ""
 
         report = (
-            f"🎀 <b>TINDER CHECK RESULT</b> 🎀\n"
-            f"{DIVIDER}\n\n"
             f"👑 <b>Username:</b> {html.escape(username)}\n"
-            f"✅ <b>Status:</b> <b>ACTIVE</b>\n"
+            f"✅ <b>Status:</b> ACTIVE\n"
             f"🌟 <b>Name:</b> {html.escape(data.get('name') or 'N/A')}\n"
             f"🎂 <b>Age:</b> {data.get('age') or 'Unknown'}\n"
             f"🏮 <b>Created:</b> {html.escape(creation_date_val or 'Unknown')}\n"
@@ -301,11 +290,9 @@ async def handle_message(message: types.Message):
             f"📸 <b>Photos:</b> {data.get('photos_count') or 'Unknown'}\n"
             f"{job_line}"
             f"{school_line}"
-            f"{verified_icon} <b>Verified:</b> {'Yes' if data.get('verified') else 'No'}\n"
+            f"🔰 <b>Verified:</b> {verified_val}\n"
             f"⏳ <b>Account Age:</b> {html.escape(data.get('account_age') or 'Unknown')}\n"
             f"{bio_line}"
-            f"\n{DIVIDER}\n"
-            f"{FOOTER_FX}"
         )
     
     await msg.delete()

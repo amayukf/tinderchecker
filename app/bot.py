@@ -281,88 +281,36 @@ async def handle_message(message: types.Message):
         
     bot_info = await bot.get_me()
 
-    SEP = "━" * 18
-
     if data.get("is_restricted"):
         report = (
-            f"╭─────────── 🚨 ───────────╮\n"
-            f"       TINDER INSIGHT\n"
-            f"╰─────────────────────────╯\n\n"
-            f"👤 <b>PROFILE</b>\n"
-            f"{SEP}\n"
-            f"<b>{html.escape(data.get('name') or 'Hidden')}</b>\n"
-            f"@{html.escape(username)}\n\n"
-            f"🛡 <b>ACCOUNT STATUS</b>\n"
-            f"{SEP}\n"
-            f"🔴 LIMITED / SHADOWBANNED\n"
-            f"⛔ Not appearing in Tinder discovery\n\n"
-            f"{SEP}\n"
-            f"🔗 tinder.com/@{html.escape(username)}\n\n"
-            f"💠 TinderInsight Premium"
+            f"� <b>Username:</b> {html.escape(username)}\n"
+            f"� <b>Status:</b> LIMITED / SHADOWBANNED\n"
+            f"🌸 <b>Name:</b> {html.escape(data.get('name') or 'Hidden')}\n"
+            f"⛔ <b>Discovery:</b> Not visible on Tinder"
         )
     else:
+        reg_year = ""
         creation_date_val = data.get('creation_date') or ""
-        pretty_date = _fmt_date(creation_date_val) if creation_date_val and creation_date_val != "Hidden" else "Unknown"
-        pretty_age  = _fmt_age(data.get('account_age') or "")
-        photos      = data.get('photos_count') or 0
-        age         = data.get('age') or 'Unknown'
-        name        = html.escape(data.get('name') or 'N/A')
-        verified    = data.get('verified')
-        bio_raw     = (data.get('bio') or "").strip()
-        bio_val     = bio_raw if bio_raw and bio_raw != "No bio written." else None
+        if creation_date_val and creation_date_val != "Hidden":
+            reg_year = creation_date_val[:4]
 
-        status_line = "🟢 <b>ACTIVE</b>"
-        verify_line = "🔵 VERIFIED" if verified else "⚪ UNVERIFIED"
+        verified_val = "💎 YES" if data.get("verified") else "🚫 NO"
+        bio_val = (data.get('bio') or "").strip()
+        bio_val = bio_val if bio_val and bio_val != "No bio written." else None
 
-        job_val    = data.get('jobs','')    if data.get('jobs')    and data.get('jobs')    != 'Not Specified' else None
-        school_val = data.get('schools','') if data.get('schools') and data.get('schools') != 'Not Specified' else None
-        extras = ""
-        if job_val:    extras += f"⚙️ {html.escape(job_val)}\n"
-        if school_val: extras += f"🏛 {html.escape(school_val)}\n"
-
-        try:
-            photo_int = int(photos)
-            photo_bullet = "Multiple profile photos available" if photo_int > 3 else f"{photo_int} profile photo{'s' if photo_int != 1 else ''} available"
-        except Exception:
-            photo_bullet = "Profile photo available"
-
-        summary = (
-            f"• Public Tinder profile detected\n"
-            f"• {photo_bullet}\n"
-            f"• Account currently active\n"
-            f"• {'Verification badge present' if verified else 'Verification badge not present'}"
-        )
-
-        about_section = ""
-        if bio_val:
-            bio_preview = html.escape(bio_val[:120] + ('...' if len(bio_val) > 120 else ''))
-            about_section = f"\n📝 <b>ABOUT</b>\n{SEP}\n<i>{bio_preview}</i>\n"
+        bio_preview = bio_val[:120] + ('...' if len(bio_val) > 120 else '') if bio_val else "No bio written."
 
         report = (
-            f"╭─────────── 💎 ───────────╮\n"
-            f"       TINDER INSIGHT\n"
-            f"╰─────────────────────────╯\n\n"
-            f"👤 <b>PROFILE</b>\n"
-            f"{SEP}\n"
-            f"<b>{name}</b>\n"
-            f"@{html.escape(username)}\n\n"
-            f"🎂 {age} Years Old  ·  🗳️ {photos} Photos\n"
-            f"{extras}\n"
-            f"🛡 <b>ACCOUNT STATUS</b>\n"
-            f"{SEP}\n"
-            f"{status_line}\n"
-            f"{verify_line}\n\n"
-            f"📅 <b>Registered</b>\n"
-            f"{pretty_date}\n\n"
-            f"⏳ <b>Account Lifetime</b>\n"
-            f"{pretty_age}\n\n"
-            f"📊 <b>PROFILE SUMMARY</b>\n"
-            f"{SEP}\n"
-            f"{summary}"
-            f"{about_section}\n"
-            f"{SEP}\n"
-            f"🔗 tinder.com/@{html.escape(username)}\n\n"
-            f"💠 TinderInsight Premium"
+            f"🔮 <b>Username:</b> {html.escape(username)}\n"
+            f"⚡ <b>Status:</b> ACTIVE\n"
+            f"🌸 <b>Name:</b> {html.escape(data.get('name') or 'N/A')}\n"
+            f"🎯 <b>Age:</b> {data.get('age') or 'Unknown'}\n"
+            f"�️ <b>Created:</b> {html.escape(creation_date_val or 'Unknown')}\n"
+            f"📌 <b>Year:</b> {reg_year or 'Unknown'}\n"
+            f"�️ <b>Photos:</b> {data.get('photos_count') or 'Unknown'}\n"
+            f"�️ <b>Verified:</b> {verified_val}\n"
+            f"⌛ <b>Account Age:</b> {html.escape(data.get('account_age') or 'Unknown')}\n"
+            f"�️ <b>Bio:</b> <i>{html.escape(bio_preview)}</i>"
         )
     
     await msg.delete()

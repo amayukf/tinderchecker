@@ -76,24 +76,52 @@ class TinderClient:
                 
                 creation_date = "Hidden"
                 account_age = "Unknown"
-                reg_time = data.get("regtime")
+                reg_time = data.get("regtime") or data.get("createdAt") or data.get("created_at")
+                
                 if reg_time:
                     try:
-                        dt = datetime.datetime.fromisoformat(reg_time.replace('Z', '+00:00'))
-                        creation_date = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-                        
-                        delta = datetime.datetime.now(datetime.timezone.utc) - dt
-                        years = delta.days // 365
-                        months = (delta.days % 365) // 30
-                        days = (delta.days % 365) % 30
-                        if years > 0:
-                            account_age = f"{years}y {months}m {days}d"
-                        elif months > 0:
-                            account_age = f"{months}m {days}d"
+                        # Try multiple date formats
+                        dt = None
+                        if isinstance(reg_time, int):
+                            # If it's a timestamp (seconds)
+                            dt = datetime.datetime.fromtimestamp(reg_time, datetime.timezone.utc)
+                        elif isinstance(reg_time, float):
+                            # If it's a timestamp (milliseconds)
+                            dt = datetime.datetime.fromtimestamp(reg_time / 1000, datetime.timezone.utc)
                         else:
-                            account_age = f"{days}d"
-                    except Exception:
-                        pass
+                            # Try ISO format
+                            if reg_time.endswith('Z'):
+                                reg_time = reg_time.replace('Z', '+00:00')
+                            dt = datetime.datetime.fromisoformat(reg_time)
+                        
+                        if dt:
+                            creation_date = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                            
+                            now = datetime.datetime.now(datetime.timezone.utc)
+                            delta = now - dt
+                            
+                            years = delta.days // 365
+                            remaining_days = delta.days % 365
+                            months = remaining_days // 30
+                            days = remaining_days % 30
+                            
+                            age_parts = []
+                            if years > 0:
+                                age_parts.append(f"{years}y")
+                            if months > 0:
+                                age_parts.append(f"{months}m")
+                            if days > 0:
+                                age_parts.append(f"{days}d")
+                            
+                            if age_parts:
+                                account_age = " ".join(age_parts)
+                            else:
+                                account_age = f"{delta.total_seconds() // 3600}h"
+                                
+                    except Exception as e:
+                        # Fallback if parsing fails
+                        account_age = "Unknown"
+                        creation_date = str(reg_time)
                 
                 is_restricted = False
                 if alive and not account_ok:

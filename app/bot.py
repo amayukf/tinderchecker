@@ -303,7 +303,6 @@ async def handle_message(message: types.Message):
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🔹 Username: <code>@{html.escape(username)}</code>\n"
         f"👤 Display Name: {name}\n"
-        f"📅 Birth Date: {birth_date}\n"
         f"🎂 User Age: {age_display}\n"
         f"📸 Photos: {photos}\n"
         f"⏳ Account Age: {account_age}\n"

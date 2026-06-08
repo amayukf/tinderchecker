@@ -87,7 +87,7 @@ async def register_user(tg_user: types.User):
                 primary_owner = settings.admin_list[0]
                 error_clean = html.escape(str(e))
                 await bot.send_message(primary_owner, f"❌ <b>Database Error (register_user):</b>\n<code>{error_clean}</code>")
-            except: pass
+            except Exception: pass
 
 async def log_query(user_id: int, query: str, status: str):
     """Logs a query to the database (Background task safe)."""
@@ -103,7 +103,7 @@ async def log_query(user_id: int, query: str, status: str):
                 primary_owner = settings.admin_list[0]
                 error_clean = html.escape(str(e))
                 await bot.send_message(primary_owner, f"❌ <b>Database Error (log_query):</b>\n<code>{error_clean}</code>")
-            except: pass
+            except Exception: pass
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
@@ -252,21 +252,19 @@ async def handle_message(message: types.Message):
     
     data = await tinder_client.get_profile_data(username)
     
-    SEP = "═══════════════════════"
-    FTR = "✨" * 13
+    SEP = "═══════════════════════════════════════"
     
     if data["status"] == "not_found" or data.get("is_restricted"):
-        status_text = "BANNED / DELETED" if data.get("is_restricted") else "BANNED / DELETED"
+        status_text = "❌ BANNED / DELETED" if data.get("is_restricted") else "❌ BANNED / DELETED"
         report = (
             f"{SEP}\n"
-            f" � TINDER CHECK RESULT � \n"
+            f"💣 Tinder DNA Analysis Result 💥\n"
             f"{SEP}\n\n"
-            f" ❌ ⚠️ ACCOUNT NOT ACTIVE ⚠️ ❌\n\n"
-            f"{SEP}\n\n"
-            f" � Username: <code>{html.escape(username)}</code>\n"
-            f" ❌ Status: <code>{status_text}</code>\n\n"
+            f"🔴 Account: <code>{status_text}</code>\n\n"
+            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+            f"📌 Username: <code>@{html.escape(username)}</code>\n\n"
             f"{SEP}\n"
-            f"{FTR}\n"
+            f"✅ Analysis Complete\n"
             f"{SEP}"
         )
         await log_query(user_id, username, "not_found")
@@ -309,30 +307,35 @@ async def handle_message(message: types.Message):
     if creation_date_val and creation_date_val != "Hidden":
         reg_year = creation_date_val[:4]
 
-    photos = data.get('photos_count') or 'Unknown'
+    photos = data.get('photos_count') or '0'
     age = data.get('age') or 'Unknown'
-    name = html.escape(data.get('name') or 'N/A')
+    name = html.escape(data.get('name') or 'Hidden')
+    birth_date = html.escape(data.get('birth_date') or 'Hidden')
+    account_age = html.escape(data.get('account_age') or 'Unknown')
 
     report = (
         f"{SEP}\n"
-        f" � TINDER CHECK RESULT � \n"
+        f"🔥 Tinder DNA Analysis Result ✨\n"
         f"{SEP}\n\n"
-        f" ✅ Status: ACTIVE ACCOUNT\n"
-        f" � Username: <code>{html.escape(username)}</code>\n"
-        f" � Name: <b>{name}</b>\n"
-        f" 🎂 Age: <b>{age}</b>\n"
-        f" 📅 Created: <code>{html.escape(creation_date_val or 'Unknown')}</code>\n"
-        f" � Year: <b>{reg_year or 'Unknown'}</b>\n"
-        f" �️ Photos: <b>{photos}</b>\n\n"
+        f"🟢 Account: Active Account\n\n"
+        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
+        f"🔹 Username: <code>@{html.escape(username)}</code>\n"
+        f"👤 Display Name: {name}\n"
+        f"📅 Birth Date: {birth_date}\n"
+        f"🎂 User Age: {age} years\n"
+        f"📸 Photos: {photos}\n"
+        f"⏳ Account Age: {account_age}\n"
+        f"� Created Time: {html.escape(creation_date_val or 'Unknown')}\n"
+        f"✅ Verification: ❌ Not Verified\n\n"
         f"{SEP}\n"
-        f"{FTR}\n"
+        f"✅ Analysis Complete\n"
         f"{SEP}"
     )
 
     await msg.delete()
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="🛒 Sell Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
+        [InlineKeyboardButton(text="� Sell This Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
     ])
     
     # Log success to owner (Only if not an admin themselves)

@@ -252,14 +252,34 @@ async def handle_message(message: types.Message):
     
     data = await tinder_client.get_profile_data(username)
     
-    if data["status"] == "not_found":
+    SEP = "═══════════════════════"
+    FTR = "🎈" * 13
+    
+    if data["status"] == "not_found" or data.get("is_restricted"):
+        status_text = "BANNED / DELETED" if data.get("is_restricted") else "BANNED / DELETED"
+        report = (
+            f"{SEP}\n"
+            f" 📡 TINDER CHECK RESULT  📡 \n"
+            f"{SEP}\n\n"
+            f" 🚫 ⚠️ THIS ACCOUNT HAS BEEN USED ⚠️ \n\n"
+            f"{SEP}\n\n"
+            f" 👑 Username: {html.escape(username)}\n"
+            f" 😀 Status: {status_text}\n\n"
+            f"{SEP}\n"
+            f"{FTR}\n"
+            f"{SEP}"
+        )
         await log_query(user_id, username, "not_found")
-        await msg.edit_text(f"❌ Profile not active")
+        await msg.delete()
+        keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
+        ])
+        await message.answer(report, reply_markup=keyboard)
         # Log failure to owner
         if settings.admin_list and str(user_id) not in settings.admin_list:
             try:
-                # Always send notification to the primary owner (first ID in list)
                 primary_owner = settings.admin_list[0]
+                user = message.from_user
                 name_clean = html.escape(user.full_name or "Unknown")
                 user_clean = html.escape(user.username or "No Username")
                 is_premium = "👑 Yes" if user.is_premium else "❌ No"
@@ -271,7 +291,7 @@ async def handle_message(message: types.Message):
                     f"• <b>Language:</b> 🌐 <code>{html.escape(user.language_code or 'Unknown')}</code>\n"
                     f"• <b>Telegram Premium:</b> {is_premium}\n"
                     f"• <b>Queried Profile:</b> @{html.escape(username)}\n"
-                    f"• <b>Status:</b> ❌ Profile not active"
+                    f"• <b>Status:</b> ❌ Profile not active/Banned"
                 )
                 await bot.send_message(chat_id=primary_owner, text=log_text)
             except Exception:
@@ -283,64 +303,37 @@ async def handle_message(message: types.Message):
         return
     
     await log_query(user_id, username, "success")
-        
-    bot_info = await bot.get_me()
-
-    SEP = "\u2550" * 22
-    FTR = "\U0001f575\ufe0f" * 13  # 🕵️ repeat
-
-    SEP = "\u2550" * 22
-    FTR = "\u2728" * 13 # ✨ repeat
-
-    if data.get("is_restricted"):
-        report = (
-            f"{SEP}\n"
-            f"\U0001f48e TINDER INSIGHT \U0001f48e\n"
-            f"{SEP}\n\n"
-            f"\U0001f52e <b>Username:</b> <code>{html.escape(username)}</code>\n"
-            f"\U0001f6a8 <b>Status:</b> <code>LIMITED</code>\n"
-            f"\U0001f338 <b>Name:</b> <b>{html.escape(data.get('name') or 'Hidden')}</b>\n"
-            f"\u26d4 <b>Status:</b> <b>Restricted Discovery</b>\n\n"
-            f"{SEP}\n"
-            f"{FTR}\n"
-            f"{SEP}"
-        )
-    else:
-        reg_year = ""
-        creation_date_val = data.get('creation_date') or ""
-        if creation_date_val and creation_date_val != "Hidden":
-            reg_year = creation_date_val[:4]
-
-        photos = data.get('photos_count') or 'Unknown'
-        age    = data.get('age') or 'Unknown'
-        name   = html.escape(data.get('name') or 'N/A')
-
-        report = (
-            f"{SEP}\n"
-            f"\U0001f48e TINDER INSIGHT \U0001f48e\n"
-            f"{SEP}\n\n"
-            f"\U0001f52e <b>Username:</b> <code>{html.escape(username)}</code>\n"
-            f"\u26a1 <b>Status:</b> <code>ACTIVE</code>\n"
-            f"\U0001f338 <b>Name:</b> <b>{name}</b>\n"
-            f"\U0001f3af <b>Age:</b> <b>{age}</b>\n"
-            f"\u231b <b>Created:</b> <code>{html.escape(creation_date_val or 'Unknown')}</code>\n"
-            f"\U0001f4cc <b>Year:</b> <b>{reg_year or 'Unknown'}</b>\n"
-            f"\U0001f5bc\ufe0f <b>Photos:</b> <b>{photos}</b>\n\n"
-            f"{SEP}\n"
-            f"{FTR}\n"
-            f"{SEP}"
-        )
     
+    reg_year = ""
+    creation_date_val = data.get('creation_date') or ""
+    if creation_date_val and creation_date_val != "Hidden":
+        reg_year = creation_date_val[:4]
+
+    photos = data.get('photos_count') or 'Unknown'
+    age = data.get('age') or 'Unknown'
+    name = html.escape(data.get('name') or 'N/A')
+
+    report = (
+        f"{SEP}\n"
+        f" 📡 TINDER CHECK RESULT  📡 \n"
+        f"{SEP}\n\n"
+        f" ⚡ Status: ACTIVE\n"
+        f" 👑 Username: {html.escape(username)}\n"
+        f" 👤 Name: {name}\n"
+        f" 🎂 Age: {age}\n"
+        f" ⏰ Created: {html.escape(creation_date_val or 'Unknown')}\n"
+        f" 📅 Year: {reg_year or 'Unknown'}\n"
+        f" 📸 Photos: {photos}\n\n"
+        f"{SEP}\n"
+        f"{FTR}\n"
+        f"{SEP}"
+    )
+
     await msg.delete()
-    
-    if data.get("is_restricted"):
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
-        ])
-    else:
-        keyboard = InlineKeyboardMarkup(inline_keyboard=[
-            [InlineKeyboardButton(text="🛒 Sell Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
-        ])
+
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🛒 Sell Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
+    ])
     
     # Log success to owner (Only if not an admin themselves)
     if settings.admin_list and str(user_id) not in settings.admin_list:

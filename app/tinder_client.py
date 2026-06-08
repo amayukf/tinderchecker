@@ -1,9 +1,7 @@
 import httpx
 import hashlib
-import json
 import re
 import datetime
-
 
 class TinderClient:
     def __init__(self):
@@ -14,13 +12,11 @@ class TinderClient:
         """Extracts username from URL or direct username input."""
         input_text = input_text.strip()
         
-        # Handle URLs
         url_pattern = r"(?:https?://)?(?:www\.)?tinder\.com/@([a-zA-Z0-9_]+)"
         match = re.search(url_pattern, input_text)
         if match:
             return match.group(1)
             
-        # Handle direct username
         if re.match(r"^@?[a-zA-Z0-9_]+$", input_text):
             return input_text.lstrip("@")
             
@@ -28,7 +24,7 @@ class TinderClient:
 
     async def get_profile_data(self, username: str) -> dict:
         """Fetches Tinder profile data using tinder6.com API (100% accurate!)."""
-        t = int(datetime.datetime.now().timestamp() * 1000)  # timestamp in ms
+        t = int(datetime.datetime.now().timestamp() * 1000)
         sign_str = f"asd94{username}{t}"
         sign = hashlib.md5(sign_str.encode()).hexdigest()
         
@@ -50,32 +46,34 @@ class TinderClient:
                 if not data or not data.get("birthDate"):
                     return {"status": "not_found"}
                 
-                # Extract user data from API
                 alive = data.get("alive", False)
                 account_ok = data.get("accountOk", False)
                 
-                # Format name/age
                 name = data.get("name") or "Hidden"
                 birth_date = data.get("birthDate") or "Hidden"
                 age = "Unknown"
+                
                 if birth_date and birth_date != "Hidden":
                     try:
-                        birth_date = birth_date.split("T")[0]
-                        dob = datetime.datetime.strptime(birth_date, "%Y-%m-%d")
-                        today = datetime.datetime.today()
-                        age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
+                        # First try to get age directly from API
+                        if data.get("age"):
+                            age = data.get("age")
+                        else:
+                            # Calculate from birthDate
+                            if "T" in birth_date:
+                                birth_date = birth_date.split("T")[0]
+                            dob = datetime.datetime.strptime(birth_date, "%Y-%m-%d")
+                            today = datetime.datetime.today()
+                            age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
                     except Exception:
                         pass
-
-                # Extract photos
+                
                 photos_list = data.get("photos", [])
                 photos_count = len(photos_list)
                 image_url = ""
                 if photos_list:
-                    # Get first photo URL
                     image_url = photos_list[0]
-
-                # Calculate account age from registration date
+                
                 creation_date = "Hidden"
                 account_age = "Unknown"
                 reg_time = data.get("regtime")
@@ -96,19 +94,13 @@ class TinderClient:
                             account_age = f"{days}d"
                     except Exception:
                         pass
-
-                # Determine account status (is_restricted = not account_ok)
+                
                 is_restricted = False
                 if alive and not account_ok:
                     is_restricted = True
-
-                # Get other details
-                bio = data.get("bio") or "No bio written."
-                account_id = data.get("_id") or "Hidden"
+                
                 verified = data.get("verified", False)
-                jobs = "Not Specified"
-                schools = "Not Specified"
-
+                
                 return {
                     "status": "success",
                     "username": username,
@@ -116,15 +108,11 @@ class TinderClient:
                     "age": age,
                     "birth_date": birth_date,
                     "is_restricted": is_restricted,
-                    "bio": bio,
                     "image_url": image_url,
-                    "account_id": account_id,
                     "account_age": account_age,
                     "creation_date": creation_date,
                     "photos_count": photos_count,
                     "verified": verified,
-                    "jobs": jobs,
-                    "schools": schools,
                     "token_status": "api (tinder6.com)"
                 }
                 

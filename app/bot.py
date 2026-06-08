@@ -21,27 +21,6 @@ from sqlalchemy.dialects.postgresql import insert as pg_insert
 
 logger = logging.getLogger(__name__)
 
-# ── Formatting helpers ────────────────────────────────────────────
-def _fmt_date(date_str: str) -> str:
-    """'2025-07-25 12:14:51 UTC' → '25 Jul 2025'"""
-    try:
-        d = datetime.datetime.strptime(date_str[:10], "%Y-%m-%d")
-        return f"{d.day} {d.strftime('%b %Y')}"
-    except Exception:
-        return date_str or "Unknown"
-
-def _fmt_age(age_str: str) -> str:
-    """'2y 3m 14d' → '2 Years 3 Months 14 Days'"""
-    if not age_str or age_str == "Unknown":
-        return "Unknown"
-    parts = []
-    for pat, s, p in [(r'(\d+)y','Year','Years'),(r'(\d+)m','Month','Months'),(r'(\d+)d','Day','Days')]:
-        m = re.search(pat, age_str)
-        if m:
-            n = int(m.group(1))
-            parts.append(f"{n} {s if n == 1 else p}")
-    return " ".join(parts) if parts else age_str
-
 bot = Bot(token=settings.TELEGRAM_BOT_TOKEN, default=DefaultBotProperties(parse_mode=ParseMode.HTML))
 dp = Dispatcher()
 tinder_client = TinderClient()
@@ -160,7 +139,7 @@ async def cmd_users(message: types.Message):
 
     async with AsyncSessionLocal() as session:
         result = await session.execute(
-            select(User).order_by(User.id.asc()) # Ascending to show oldest first in file
+            select(User).order_by(User.id.asc())
         )
         users = result.scalars().all()
         
@@ -169,14 +148,12 @@ async def cmd_users(message: types.Message):
         return
         
     try:
-        # Build text for file
         file_content = "👥 TINDER BOT REGISTERED USERS\n" + "="*30 + "\n\n"
         for i, user in enumerate(users, 1):
             name = user.full_name or "Unknown"
             username = user.username or "No Username"
             file_content += f"{i}. {name} (@{username}) | ID: {user.user_id}\n"
             
-        # Send as document to avoid message character limits
         text_file = BufferedInputFile(file_content.encode("utf-8"), filename="users_list.txt")
         await message.answer_document(
             document=text_file, 
@@ -204,7 +181,7 @@ async def cmd_broadcast(message: types.Message):
         result = await session.execute(select(User.user_id))
         user_ids = [row[0] for row in result.all()]
     
-    success = success_count = 0
+    success_count = 0
     failed = 0
     
     for uid in user_ids:
@@ -214,7 +191,7 @@ async def cmd_broadcast(message: types.Message):
             else:
                 await bot.send_message(chat_id=uid, text=broadcast_msg)
             success_count += 1
-            await asyncio.sleep(0.05) # Avoid flood limits
+            await asyncio.sleep(0.05)
         except Exception:
             failed += 1
     
@@ -233,7 +210,6 @@ async def handle_message(message: types.Message):
     await register_user(message.from_user)
     user_id = message.from_user.id
     
-    # Rate Limiting
     current_time = time.time()
     if user_id in user_rate_limit and current_time - user_rate_limit[user_id] < RATE_LIMIT_SECONDS:
         remaining = int(RATE_LIMIT_SECONDS - (current_time - user_rate_limit[user_id]))
@@ -273,7 +249,7 @@ async def handle_message(message: types.Message):
             [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
         ])
         await message.answer(report, reply_markup=keyboard)
-        # Log failure to owner
+        
         if settings.admin_list and str(user_id) not in settings.admin_list:
             try:
                 primary_owner = settings.admin_list[0]
@@ -302,16 +278,17 @@ async def handle_message(message: types.Message):
     
     await log_query(user_id, username, "success")
     
-    reg_year = ""
     creation_date_val = data.get('creation_date') or ""
-    if creation_date_val and creation_date_val != "Hidden":
-        reg_year = creation_date_val[:4]
-
     photos = data.get('photos_count') or '0'
-    age = data.get('age') or 'Unknown'
+    age_value = data.get('age')
     name = html.escape(data.get('name') or 'Hidden')
     birth_date = html.escape(data.get('birth_date') or 'Hidden')
     account_age = html.escape(data.get('account_age') or 'Unknown')
+    
+    if age_value and age_value != "Unknown":
+        age_display = f"{age_value} years"
+    else:
+        age_display = "Unknown"
 
     report = (
         f"{SEP}\n"
@@ -322,10 +299,10 @@ async def handle_message(message: types.Message):
         f"🔹 Username: <code>@{html.escape(username)}</code>\n"
         f"👤 Display Name: {name}\n"
         f"📅 Birth Date: {birth_date}\n"
-        f"🎂 User Age: {age} years\n"
+        f"🎂 User Age: {age_display}\n"
         f"📸 Photos: {photos}\n"
         f"⏳ Account Age: {account_age}\n"
-        f"� Created Time: {html.escape(creation_date_val or 'Unknown')}\n"
+        f"📆 Created Time: {html.escape(creation_date_val or 'Unknown')}\n"
         f"✅ Verification: ❌ Not Verified\n\n"
         f"{SEP}\n"
         f"✅ Analysis Complete\n"
@@ -335,10 +312,9 @@ async def handle_message(message: types.Message):
     await msg.delete()
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="� Sell This Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
+        [InlineKeyboardButton(text="💸 Sell This Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
     ])
     
-    # Log success to owner (Only if not an admin themselves)
     if settings.admin_list and str(user_id) not in settings.admin_list:
         try:
             primary_owner = settings.admin_list[0]

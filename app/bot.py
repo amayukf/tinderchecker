@@ -253,18 +253,18 @@ async def handle_message(message: types.Message):
     data = await tinder_client.get_profile_data(username)
     
     SEP = "═══════════════════════"
-    FTR = "🎈" * 13
+    FTR = "✨" * 13
     
     if data["status"] == "not_found" or data.get("is_restricted"):
         status_text = "BANNED / DELETED" if data.get("is_restricted") else "BANNED / DELETED"
         report = (
             f"{SEP}\n"
-            f" 📡 TINDER CHECK RESULT  📡 \n"
+            f" � TINDER CHECK RESULT � \n"
             f"{SEP}\n\n"
-            f" 🚫 ⚠️ THIS ACCOUNT HAS BEEN USED ⚠️ \n\n"
+            f" ❌ ⚠️ ACCOUNT NOT ACTIVE ⚠️ ❌\n\n"
             f"{SEP}\n\n"
-            f" 👑 Username: {html.escape(username)}\n"
-            f" 😀 Status: {status_text}\n\n"
+            f" � Username: <code>{html.escape(username)}</code>\n"
+            f" ❌ Status: <code>{status_text}</code>\n\n"
             f"{SEP}\n"
             f"{FTR}\n"
             f"{SEP}"
@@ -315,15 +315,15 @@ async def handle_message(message: types.Message):
 
     report = (
         f"{SEP}\n"
-        f" 📡 TINDER CHECK RESULT  📡 \n"
+        f" � TINDER CHECK RESULT � \n"
         f"{SEP}\n\n"
-        f" ⚡ Status: ACTIVE\n"
-        f" 👑 Username: {html.escape(username)}\n"
-        f" 👤 Name: {name}\n"
-        f" 🎂 Age: {age}\n"
-        f" ⏰ Created: {html.escape(creation_date_val or 'Unknown')}\n"
-        f" 📅 Year: {reg_year or 'Unknown'}\n"
-        f" 📸 Photos: {photos}\n\n"
+        f" ✅ Status: ACTIVE ACCOUNT\n"
+        f" � Username: <code>{html.escape(username)}</code>\n"
+        f" � Name: <b>{name}</b>\n"
+        f" 🎂 Age: <b>{age}</b>\n"
+        f" 📅 Created: <code>{html.escape(creation_date_val or 'Unknown')}</code>\n"
+        f" � Year: <b>{reg_year or 'Unknown'}</b>\n"
+        f" �️ Photos: <b>{photos}</b>\n\n"
         f"{SEP}\n"
         f"{FTR}\n"
         f"{SEP}"

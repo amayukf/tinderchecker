@@ -156,7 +156,7 @@ async def cmd_users(message: types.Message):
             
         text_file = BufferedInputFile(file_content.encode("utf-8"), filename="users_list.txt")
         await message.answer_document(
-            document=text_file, 
+            document=text_file,
             caption=f"✅ <b>Total Users Found:</b> <code>{len(users)}</code>\n\nFull user list generated successfully."
         )
     except Exception as e:
@@ -278,18 +278,23 @@ async def handle_message(message: types.Message):
     
     await log_query(user_id, username, "success")
     
-    creation_date_val = data.get('creation_date') or ""
-    photos = data.get('photos_count') or '0'
-    age_value = data.get('age')
-    name = html.escape(data.get('name') or 'Hidden')
-    birth_date = html.escape(data.get('birth_date') or 'Hidden')
-    account_age = html.escape(data.get('account_age') or 'Unknown')
+    creation_date_val = data.get("creation_date") or ""
+    photos = data.get("photos_count") or 0
+    age_value = data.get("age")
+    name = html.escape(data.get("name") or "Hidden")
+    birth_date = html.escape(data.get("birth_date") or "Hidden")
+    account_age = data.get("account_age") or "Not available"
     
+    # Display age
     if age_value and age_value != "Unknown":
         age_display = f"{age_value} years"
     else:
         age_display = "Unknown"
-
+    
+    # Display account age—if not available, show creation date
+    if account_age == "Not available" and creation_date_val and creation_date_val != "Not available":
+        account_age = str(creation_date_val)
+    
     report = (
         f"{SEP}\n"
         f"🔥 Tinder DNA Analysis Result ✨\n"

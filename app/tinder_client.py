@@ -74,54 +74,60 @@ class TinderClient:
                 if photos_list:
                     image_url = photos_list[0]
                 
-                creation_date = "Hidden"
-                account_age = "Unknown"
-                reg_time = data.get("regtime") or data.get("createdAt") or data.get("created_at")
+                # Use EXACT same method as your working website!
+                reg_date = data.get("regtime")
+                creation_date = "Not available"
+                account_age = "Not available"
                 
-                if reg_time:
+                if reg_date:
+                    creation_date = str(reg_date)
                     try:
-                        # Try multiple date formats
-                        dt = None
-                        if isinstance(reg_time, int):
-                            # If it's a timestamp (seconds)
-                            dt = datetime.datetime.fromtimestamp(reg_time, datetime.timezone.utc)
-                        elif isinstance(reg_time, float):
-                            # If it's a timestamp (milliseconds)
-                            dt = datetime.datetime.fromtimestamp(reg_time / 1000, datetime.timezone.utc)
-                        else:
-                            # Try ISO format
-                            if reg_time.endswith('Z'):
-                                reg_time = reg_time.replace('Z', '+00:00')
-                            dt = datetime.datetime.fromisoformat(reg_time)
+                        # Try multiple ways to parse reg_date
+                        reg_dt = None
                         
-                        if dt:
-                            creation_date = dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                        # Try 1: ISO format with Z
+                        try:
+                            reg_str = str(reg_date)
+                            if reg_str.endswith('Z'):
+                                reg_str = reg_str.replace('Z', '+00:00')
+                            reg_dt = datetime.datetime.fromisoformat(reg_str)
+                        except Exception:
+                            pass
+                        
+                        # Try 2: Just split on T and use date part
+                        if not reg_dt:
+                            try:
+                                reg_str = str(reg_date).split('T')[0]
+                                reg_dt = datetime.datetime.strptime(reg_str, "%Y-%m-%d")
+                            except Exception:
+                                pass
+                        
+                        if reg_dt:
+                            # Make it UTC-aware if naive
+                            if reg_dt.tzinfo is None:
+                                reg_dt = reg_dt.replace(tzinfo=datetime.timezone.utc)
                             
-                            now = datetime.datetime.now(datetime.timezone.utc)
-                            delta = now - dt
+                            creation_date = reg_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
                             
-                            years = delta.days // 365
-                            remaining_days = delta.days % 365
-                            months = remaining_days // 30
-                            days = remaining_days % 30
+                            # Calculate account age like your website!
+                            today = datetime.datetime.now(datetime.timezone.utc)
+                            delta = today - reg_dt
+                            days = delta.days
                             
-                            age_parts = []
-                            if years > 0:
-                                age_parts.append(f"{years}y")
-                            if months > 0:
-                                age_parts.append(f"{months}m")
-                            if days > 0:
-                                age_parts.append(f"{days}d")
-                            
-                            if age_parts:
-                                account_age = " ".join(age_parts)
+                            if days >= 365:
+                                years = days // 365
+                                remaining_days = days % 365
+                                months = remaining_days // 30
+                                account_age = f"{years}y {months}m {remaining_days % 30}d"
+                            elif days >= 30:
+                                months = days // 30
+                                remaining_days = days % 30
+                                account_age = f"{months}m {remaining_days}d"
                             else:
-                                account_age = f"{delta.total_seconds() // 3600}h"
-                                
-                    except Exception as e:
-                        # Fallback if parsing fails
-                        account_age = "Unknown"
-                        creation_date = str(reg_time)
+                                account_age = f"{days} days"
+                    except Exception:
+                        # If all fails, just show raw reg_date as account age
+                        account_age = "Not available"
                 
                 is_restricted = False
                 if alive and not account_ok:

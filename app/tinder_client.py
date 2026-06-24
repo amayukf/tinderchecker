@@ -37,55 +37,73 @@ class TinderClient:
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    if data and data.get("code") == 200 and isinstance(data.get("data"), dict):
-                        data = data.get("data", {})
-                        
-                        name = data.get("name") or "Hidden"
-                        age = data.get("age") or "Unknown"
-                        birth_date_val = "Hidden"
-                        
-                        photos_list = data.get("photos", [])
-                        photos_count = len(photos_list)
-                        image_url = photos_list[0] if photos_list else ""
-                        
-                        reg_date = data.get("create_time")
-                        creation_date = "Not available"
-                        account_age = "Not available"
-                        
-                        if reg_date:
-                            try:
-                                reg_dt = datetime.datetime.strptime(str(reg_date), "%Y-%m-%d %H:%M:%S")
-                                creation_date = reg_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-                                today = datetime.datetime.utcnow()
-                                delta = today - reg_dt
-                                days = delta.days
-                                if days >= 365:
-                                    years = days // 365
-                                    remaining_days = days % 365
-                                    months = remaining_days // 30
-                                    account_age = f"{years}y {months}m {remaining_days % 30}d"
-                                elif days >= 30:
-                                    months = days // 30
-                                    remaining_days = days % 30
-                                    account_age = f"{months}m {remaining_days}d"
-                                else:
-                                    account_age = f"{days} days"
-                            except Exception:
-                                account_age = "Not available"
-                        
+                    if data and isinstance(data, dict):
+                        code = data.get("code")
+                        if code == 200 and isinstance(data.get("data"), dict):
+                            data = data.get("data", {})
+                            
+                            name = data.get("name") or "Hidden"
+                            age = data.get("age") or "Unknown"
+                            birth_date_val = "Hidden"
+                            
+                            photos_list = data.get("photos", [])
+                            photos_count = len(photos_list)
+                            image_url = photos_list[0] if photos_list else ""
+                            
+                            reg_date = data.get("create_time")
+                            creation_date = "Not available"
+                            account_age = "Not available"
+                            
+                            if reg_date:
+                                try:
+                                    reg_dt = datetime.datetime.strptime(str(reg_date), "%Y-%m-%d %H:%M:%S")
+                                    creation_date = reg_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                                    today = datetime.datetime.utcnow()
+                                    delta = today - reg_dt
+                                    days = delta.days
+                                    if days >= 365:
+                                        years = days // 365
+                                        remaining_days = days % 365
+                                        months = remaining_days // 30
+                                        account_age = f"{years}y {months}m {remaining_days % 30}d"
+                                    elif days >= 30:
+                                        months = days // 30
+                                        remaining_days = days % 30
+                                        account_age = f"{months}m {remaining_days}d"
+                                    else:
+                                        account_age = f"{days} days"
+                                except Exception:
+                                    account_age = "Not available"
+                            
+                            return {
+                                "status": "success",
+                                "username": username,
+                                "name": name,
+                                "age": age,
+                                "birth_date": birth_date_val,
+                                "is_restricted": False,
+                                "image_url": image_url,
+                                "account_age": account_age,
+                                "creation_date": creation_date,
+                                "photos_count": photos_count,
+                                "verified": False,
+                                "token_status": "api (vvip.tinderfz.com)"
+                            }
+                        msg = str(data.get("msg") or data.get("message") or "").strip()
                         return {
-                            "status": "success",
+                            "status": "not_found",
                             "username": username,
-                            "name": name,
-                            "age": age,
-                            "birth_date": birth_date_val,
-                            "is_restricted": False,
-                            "image_url": image_url,
-                            "account_age": account_age,
-                            "creation_date": creation_date,
-                            "photos_count": photos_count,
+                            "name": "Hidden",
+                            "age": "Unknown",
+                            "birth_date": "Hidden",
+                            "is_restricted": True,
+                            "image_url": "",
+                            "account_age": "Unknown",
+                            "creation_date": "Unknown",
+                            "photos_count": 0,
                             "verified": False,
-                            "token_status": "api (vvip.tinderfz.com)"
+                            "token_status": "api (vvip.tinderfz.com)",
+                            "api_message": msg
                         }
         except Exception:
             pass

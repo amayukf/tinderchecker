@@ -1,17 +1,13 @@
 
 import httpx
-import hashlib
 import datetime
 
 # Test with a sample username
 username = "john"  # Replace with a real Tinder username to test
-t = int(datetime.datetime.now().timestamp() * 1000)
-sign_str = f"asd94{username}{t}"
-sign = hashlib.md5(sign_str.encode()).hexdigest()
+api_url = "https://vvip.tinderfz.com/api.php"
+params = {"username": username}
 
-api_url = f"https://tinder6.com/getUser.php?user={username}&t={t}&sign={sign}"
-
-print(f"Calling API: {api_url}\n")
+print(f"Calling API: {api_url} with params={params}\n")
 
 try:
     response = httpx.get(api_url, timeout=30)

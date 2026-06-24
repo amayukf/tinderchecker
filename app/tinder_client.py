@@ -1,12 +1,11 @@
 import httpx
-import hashlib
 import re
 import datetime
 from bs4 import BeautifulSoup
 
 class TinderClient:
     def __init__(self):
-        self.base_api = "https://tinder6.com/getUser.php"
+        self.base_api = "https://vvip.tinderfz.com/api.php"
         self.base_url = "https://tinder.com"
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
@@ -28,96 +27,51 @@ class TinderClient:
         return None
 
     async def get_profile_data(self, username: str) -> dict:
-        """First try tinder6.com API, if that fails fall back to scraping public Tinder page."""
-        # First try tinder6.com API
-        t = int(datetime.datetime.now().timestamp() * 1000)
-        sign_str = f"asd94{username}{t}"
-        sign = hashlib.md5(sign_str.encode()).hexdigest()
-        
+        """First try the vvip.tinderfz.com API, if that fails fall back to scraping public Tinder page."""
         try:
             async with httpx.AsyncClient(follow_redirects=True, timeout=30) as client:
                 response = await client.get(
                     self.base_api,
-                    params={"user": username, "t": t, "sign": sign},
+                    params={"username": username},
                     headers=self.headers
                 )
                 if response.status_code == 200:
                     data = response.json()
-                    # Check if API returned meaningful data
-                    if data and (data.get("birthDate") or data.get("name")):
-                        alive = data.get("alive", False)
-                        account_ok = data.get("accountOk", False)
+                    if data and data.get("code") == 200 and isinstance(data.get("data"), dict):
+                        data = data.get("data", {})
                         
                         name = data.get("name") or "Hidden"
-                        birth_date_val = data.get("birthDate") or "Hidden"
-                        age = "Unknown"
-                        
-                        if birth_date_val and birth_date_val != "Hidden":
-                            try:
-                                if data.get("age"):
-                                    age = data.get("age")
-                                else:
-                                    if "T" in birth_date_val:
-                                        birth_date_val = birth_date_val.split("T")[0]
-                                    dob = datetime.datetime.strptime(birth_date_val, "%Y-%m-%d")
-                                    today = datetime.datetime.today()
-                                    age = today.year - dob.year - ((today.month, today.day) < (dob.month, dob.day))
-                            except Exception:
-                                pass
+                        age = data.get("age") or "Unknown"
+                        birth_date_val = "Hidden"
                         
                         photos_list = data.get("photos", [])
                         photos_count = len(photos_list)
-                        image_url = ""
-                        if photos_list:
-                            image_url = photos_list[0]
+                        image_url = photos_list[0] if photos_list else ""
                         
-                        reg_date = data.get("regtime")
+                        reg_date = data.get("create_time")
                         creation_date = "Not available"
                         account_age = "Not available"
                         
                         if reg_date:
-                            creation_date = str(reg_date)
                             try:
-                                reg_dt = None
-                                reg_str = str(reg_date)
-                                if reg_str.endswith('Z'):
-                                    reg_str = reg_str.replace('Z', '+00:00')
-                                try:
-                                    reg_dt = datetime.datetime.fromisoformat(reg_str)
-                                except Exception:
-                                    pass
-                                if not reg_dt:
-                                    try:
-                                        reg_str = str(reg_date).split('T')[0]
-                                        reg_dt = datetime.datetime.strptime(reg_str, "%Y-%m-%d")
-                                    except Exception:
-                                        pass
-                                if reg_dt:
-                                    if reg_dt.tzinfo is None:
-                                        reg_dt = reg_dt.replace(tzinfo=datetime.timezone.utc)
-                                    creation_date = reg_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
-                                    today = datetime.datetime.now(datetime.timezone.utc)
-                                    delta = today - reg_dt
-                                    days = delta.days
-                                    if days >= 365:
-                                        years = days // 365
-                                        remaining_days = days % 365
-                                        months = remaining_days // 30
-                                        account_age = f"{years}y {months}m {remaining_days % 30}d"
-                                    elif days >= 30:
-                                        months = days // 30
-                                        remaining_days = days % 30
-                                        account_age = f"{months}m {remaining_days}d"
-                                    else:
-                                        account_age = f"{days} days"
+                                reg_dt = datetime.datetime.strptime(str(reg_date), "%Y-%m-%d %H:%M:%S")
+                                creation_date = reg_dt.strftime("%Y-%m-%d %H:%M:%S UTC")
+                                today = datetime.datetime.utcnow()
+                                delta = today - reg_dt
+                                days = delta.days
+                                if days >= 365:
+                                    years = days // 365
+                                    remaining_days = days % 365
+                                    months = remaining_days // 30
+                                    account_age = f"{years}y {months}m {remaining_days % 30}d"
+                                elif days >= 30:
+                                    months = days // 30
+                                    remaining_days = days % 30
+                                    account_age = f"{months}m {remaining_days}d"
+                                else:
+                                    account_age = f"{days} days"
                             except Exception:
                                 account_age = "Not available"
-                        
-                        is_restricted = False
-                        if alive and not account_ok:
-                            is_restricted = True
-                        
-                        verified = data.get("verified", False)
                         
                         return {
                             "status": "success",
@@ -125,17 +79,17 @@ class TinderClient:
                             "name": name,
                             "age": age,
                             "birth_date": birth_date_val,
-                            "is_restricted": is_restricted,
+                            "is_restricted": False,
                             "image_url": image_url,
                             "account_age": account_age,
                             "creation_date": creation_date,
                             "photos_count": photos_count,
-                            "verified": verified,
-                            "token_status": "api (tinder6.com)"
+                            "verified": False,
+                            "token_status": "api (vvip.tinderfz.com)"
                         }
         except Exception:
             pass
-        
+
         # Fallback to scraping public Tinder profile
         return await self._scrape_public_profile(username)
     

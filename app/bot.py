@@ -9,7 +9,7 @@ import io
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import InlineKeyboardMarkup, InlineKeyboardButton, BufferedInputFile
 from aiogram.filters import CommandStart, Command
-from aiogram.enums import ParseMode
+from aiogram.enums import ParseMode, ChatMemberStatus
 from aiogram.client.default import DefaultBotProperties
 from app.config import settings
 from app.tinder_client import TinderClient
@@ -28,34 +28,114 @@ tinder_client = TinderClient()
 user_rate_limit = {}
 RATE_LIMIT_SECONDS = 5
 
+REQUIRED_CHANNEL = "@N_Notic"
+CHANNEL_URL = "https://t.me/N_Notic"
+
 async def init_db():
     """Initializes the database tables."""
     async with engine.begin() as conn:
         await conn.run_sync(Base.metadata.create_all)
+        # Add new columns if they don't exist (migration-safe)
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN referred_by BIGINT"))
+        except Exception:
+            pass
+        try:
+            await conn.execute(text("ALTER TABLE users ADD COLUMN referral_count INTEGER DEFAULT 0"))
+        except Exception:
+            pass
     logger.info("Database initialized.")
 
-async def register_user(tg_user: types.User):
+async def check_channel_membership(user_id: int) -> bool:
+    """Check if a user is a member of the required channel."""
+    try:
+        member = await bot.get_chat_member(chat_id=REQUIRED_CHANNEL, user_id=user_id)
+        return member.status in [
+            ChatMemberStatus.MEMBER,
+            ChatMemberStatus.ADMINISTRATOR,
+            ChatMemberStatus.CREATOR
+        ]
+    except Exception as e:
+        logger.error(f"Channel membership check failed: {e}")
+        return False
+
+async def send_join_prompt(message: types.Message):
+    """Send a message requiring the user to join the channel first."""
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Join Channel", url=CHANNEL_URL)],
+        [InlineKeyboardButton(text="✅ I've Joined", callback_data="check_joined")]
+    ])
+    await message.answer(
+        f"🔒 <b>Channel Membership Required!</b>\n\n"
+        f"To use this bot, you must first join our channel:\n"
+        f"👉 {CHANNEL_URL}\n\n"
+        f"After joining, tap <b>✅ I've Joined</b> below.",
+        reply_markup=keyboard,
+        disable_web_page_preview=True
+    )
+
+@dp.callback_query(lambda c: c.data == "check_joined")
+async def callback_check_joined(callback: types.CallbackQuery):
+    """Handle the 'I've Joined' button press."""
+    is_member = await check_channel_membership(callback.from_user.id)
+    if is_member:
+        await callback.message.edit_text(
+            f"✅ <b>Verified!</b> You are now a member.\n\n"
+            f"🔥 Send me any Tinder username to start checking profiles!"
+        )
+        await callback.answer("✅ Verified! You can now use the bot.", show_alert=False)
+    else:
+        await callback.answer("❌ You haven't joined yet! Please join the channel first.", show_alert=True)
+
+async def register_user(tg_user: types.User, referred_by: int = None):
     """Saves or updates user info in the database (Background task safe)."""
     if not tg_user:
         return
     try:
         async with AsyncSessionLocal() as session:
-            user_values = {
-                'user_id': tg_user.id,
-                'username': tg_user.username,
-                'full_name': tg_user.full_name
-            }
-            if "postgresql" in engine.dialect.name:
-                stmt = pg_insert(User).values(**user_values).on_conflict_do_update(
-                    index_elements=['user_id'],
-                    set_={'username': tg_user.username, 'full_name': tg_user.full_name}
+            # Check if user already exists
+            existing = await session.scalar(select(User.id).where(User.user_id == tg_user.id))
+            
+            if existing:
+                # Update existing user (don't overwrite referral info)
+                await session.execute(
+                    update(User).where(User.user_id == tg_user.id).values(
+                        username=tg_user.username,
+                        full_name=tg_user.full_name
+                    )
                 )
             else:
-                stmt = sqlite_insert(User).values(**user_values).on_conflict_do_update(
-                    index_elements=['user_id'],
-                    set_={'username': tg_user.username, 'full_name': tg_user.full_name}
+                # New user - insert with referral info
+                new_user = User(
+                    user_id=tg_user.id,
+                    username=tg_user.username,
+                    full_name=tg_user.full_name,
+                    referred_by=referred_by,
+                    referral_count=0
                 )
-            await session.execute(stmt)
+                session.add(new_user)
+                
+                # Credit the referrer
+                if referred_by and referred_by != tg_user.id:
+                    await session.execute(
+                        update(User).where(User.user_id == referred_by).values(
+                            referral_count=User.referral_count + 1
+                        )
+                    )
+                    # Notify the referrer
+                    try:
+                        await bot.send_message(
+                            chat_id=referred_by,
+                            text=(
+                                f"🎉 <b>New Referral!</b>\n\n"
+                                f"<a href='tg://user?id={tg_user.id}'>{html.escape(tg_user.full_name or 'Someone')}</a> "
+                                f"joined using your referral link!\n"
+                                f"Use /refer to see your total referrals."
+                            )
+                        )
+                    except Exception:
+                        pass
+            
             await session.commit()
     except Exception as e:
         logger.error(f"register_user failed: {e}")
@@ -84,20 +164,74 @@ async def log_query(user_id: int, query: str, status: str):
 
 @dp.message(CommandStart())
 async def cmd_start(message: types.Message):
+    # Extract referral ID from deep link (e.g., /start ref_12345678)
+    referrer_id = None
+    args = message.text.split()
+    if len(args) > 1 and args[1].startswith("ref_"):
+        try:
+            referrer_id = int(args[1].replace("ref_", ""))
+        except ValueError:
+            pass
+    
     try:
-        await register_user(message.from_user)
+        await register_user(message.from_user, referred_by=referrer_id)
     except Exception as e:
         logger.error(f"register_user in cmd_start failed: {e}")
+    
+    # Check channel membership
+    is_member = await check_channel_membership(message.from_user.id)
+    if not is_member:
+        await send_join_prompt(message)
+        return
+    
+    # Get bot info for referral link
+    bot_info = await bot.get_me()
+    referral_link = f"https://t.me/{bot_info.username}?start=ref_{message.from_user.id}"
+    
     welcome_text = (
         f"🔥 <b>Welcome to Premium Tinder OSINT & DNA Checker!</b> 🔥\n\n"
         f"🎯 Send me any Tinder username to inspect status, account age & OSINT risk score.\n\n"
         f"<i>Examples:</i>\n"
         f"• boy\n"
         f"• @boy\n"
-        f"• tinder.com/@boy"
+        f"• tinder.com/@boy\n\n"
+        f"📎 <b>Your Referral Link:</b>\n<code>{referral_link}</code>\n"
+        f"Share it & earn referral credits!"
     )
-    keyboard = InlineKeyboardMarkup(inline_keyboard=[[InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]])
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="📢 Join Channel", url=CHANNEL_URL)]
+    ])
     await message.answer(welcome_text, reply_markup=keyboard, disable_web_page_preview=True)
+
+@dp.message(Command("refer"))
+async def cmd_refer(message: types.Message):
+    """Show user's referral link and stats."""
+    # Check channel membership first
+    is_member = await check_channel_membership(message.from_user.id)
+    if not is_member:
+        await send_join_prompt(message)
+        return
+    
+    bot_info = await bot.get_me()
+    referral_link = f"https://t.me/{bot_info.username}?start=ref_{message.from_user.id}"
+    
+    referral_count = 0
+    try:
+        async with AsyncSessionLocal() as session:
+            count = await session.scalar(
+                select(User.referral_count).where(User.user_id == message.from_user.id)
+            )
+            referral_count = count or 0
+    except Exception:
+        pass
+    
+    await message.answer(
+        f"🔗 <b>Your Referral Dashboard</b>\n\n"
+        f"📎 <b>Your Link:</b>\n<code>{referral_link}</code>\n\n"
+        f"👥 <b>Total Referrals:</b> <code>{referral_count}</code>\n\n"
+        f"Share your link — every new user who joins counts towards your referrals!",
+        disable_web_page_preview=True
+    )
 
 @dp.message(Command("debug"))
 async def cmd_debug(message: types.Message):
@@ -129,9 +263,27 @@ async def cmd_stats(message: types.Message):
             
             success_queries = await session.scalar(select(func.count(QueryLog.id)).where(QueryLog.status == 'success')) or 0
             banned_queries = await session.scalar(select(func.count(QueryLog.id)).where(QueryLog.status == 'not_found')) or 0
+            
+            # Referral stats
+            total_referrals = await session.scalar(select(func.sum(User.referral_count))) or 0
+            top_referrers_result = await session.execute(
+                select(User.user_id, User.username, User.referral_count)
+                .where(User.referral_count > 0)
+                .order_by(User.referral_count.desc())
+                .limit(5)
+            )
+            top_referrers = top_referrers_result.all()
 
         api_health = await tinder_client.ping_endpoints()
         health_text = "\n".join([f"• <code>{domain}</code>: {status}" for domain, status in api_health.items()])
+
+        top_ref_text = ""
+        if top_referrers:
+            top_ref_text = "\n🏆 <b>Top Referrers:</b>\n"
+            for i, (uid, uname, count) in enumerate(top_referrers, 1):
+                medal = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"][i-1]
+                display = f"@{uname}" if uname else f"<code>{uid}</code>"
+                top_ref_text += f"{medal} {display}: <code>{count}</code> referrals\n"
 
         stats_report = (
             f"⚡ <b>TINDER BOT SUPERPOWERS DASHBOARD</b> ⚡\n"
@@ -141,6 +293,9 @@ async def cmd_stats(message: types.Message):
             f"• Total Queries Run: <code>{query_count}</code>\n"
             f"• Active Profiles Found: <code>{success_queries}</code>\n"
             f"• Banned / Deleted Profiles: <code>{banned_queries}</code>\n\n"
+            f"🔗 <b>Referral System:</b>\n"
+            f"• Total Referrals: <code>{total_referrals}</code>\n"
+            f"{top_ref_text}\n"
             f"🌐 <b>API Health Matrix (Multi-Failover):</b>\n"
             f"{health_text}\n\n"
             f"═══════════════════════════════════════"
@@ -170,7 +325,8 @@ async def cmd_users(message: types.Message):
         for i, user in enumerate(users, 1):
             name = user.full_name or "Unknown"
             username = user.username or "No Username"
-            file_content += f"{i}. {name} (@{username}) | ID: {user.user_id}\n"
+            ref_count = user.referral_count or 0
+            file_content += f"{i}. {name} (@{username}) | ID: {user.user_id} | Referrals: {ref_count}\n"
             
         text_file = BufferedInputFile(file_content.encode("utf-8"), filename="users_list.txt")
         await message.answer_document(
@@ -225,6 +381,12 @@ async def handle_message(message: types.Message):
     if not message.text:
         return
 
+    # Force channel membership on every query
+    is_member = await check_channel_membership(message.from_user.id)
+    if not is_member:
+        await send_join_prompt(message)
+        return
+
     await register_user(message.from_user)
     user_id = message.from_user.id
     
@@ -252,7 +414,7 @@ async def handle_message(message: types.Message):
         status_text = "❌ BANNED / DELETED" if not data.get("is_restricted") else "🔴 SHADOWBANNED"
         report = (
             f"{SEP}\n"
-            f"� Tinder DNA & OSINT Analysis �\n"
+            f"💣 Tinder DNA & OSINT Analysis 💥\n"
             f"{SEP}\n\n"
             f"🔴 Account: <code>{status_text}</code>\n"
             f"🛡️ Risk Rating: <b>{risk_info.get('badge', '🔴 HIGH RISK')}</b>\n\n"
@@ -266,7 +428,7 @@ async def handle_message(message: types.Message):
         await msg.delete()
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
             [InlineKeyboardButton(text="🌹 Open Profile", url=f"https://tinder.com/@{username}")],
-            [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
+            [InlineKeyboardButton(text="📢 Join Channel", url=CHANNEL_URL)]
         ])
         await message.answer(report, reply_markup=keyboard)
         
@@ -343,7 +505,7 @@ async def handle_message(message: types.Message):
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
         [InlineKeyboardButton(text="🌹 Open Profile", url=f"https://tinder.com/@{username}")],
-        [InlineKeyboardButton(text="💸 Sell This Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
+        [InlineKeyboardButton(text="💸 Sell This Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url=CHANNEL_URL)]
     ])
     
     if settings.admin_list and str(user_id) not in settings.admin_list:

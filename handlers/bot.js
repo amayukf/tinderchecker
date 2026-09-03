@@ -6,12 +6,81 @@ const tinderClient = new TinderClient();
 const userRateLimit = new Map();
 const RATE_LIMIT_SECONDS = 5;
 
+const REQUIRED_CHANNEL = "@N_Notic";
+const CHANNEL_URL = "https://t.me/N_Notic";
+
 function escapeHtml(text) {
   if (!text) return "";
   return String(text)
     .replace(/&/g, "&amp;")
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;");
+}
+
+async function checkChannelMembership(userId) {
+  try {
+    const result = await api._request('getChatMember', {
+      chat_id: REQUIRED_CHANNEL,
+      user_id: userId
+    });
+    return ['member', 'administrator', 'creator'].includes(result.status);
+  } catch (err) {
+    console.error("Channel membership check failed:", err);
+    return false;
+  }
+}
+
+async function sendJoinPrompt(chatId) {
+  await api.sendMessage(chatId,
+    `🔒 <b>Channel Membership Required!</b>\n\n` +
+    `To use this bot, you must first join our channel:\n` +
+    `👉 ${CHANNEL_URL}\n\n` +
+    `After joining, tap <b>✅ I've Joined</b> below.`,
+    {
+      reply_markup: {
+        inline_keyboard: [
+          [{ text: "📢 Join Channel", url: CHANNEL_URL }],
+          [{ text: "✅ I've Joined", callback_data: "check_joined" }]
+        ]
+      },
+      disable_web_page_preview: true
+    }
+  );
+}
+
+// Handle callback queries (e.g. "I've Joined" button)
+export async function handleCallbackQuery(callbackQuery, env) {
+  if (!callbackQuery || !callbackQuery.from) return;
+
+  const data = callbackQuery.data;
+  const telegramId = callbackQuery.from.id;
+  const chatId = callbackQuery.message?.chat?.id;
+  const messageId = callbackQuery.message?.message_id;
+
+  if (data === "check_joined") {
+    const isMember = await checkChannelMembership(telegramId);
+    if (isMember) {
+      // Edit the original message
+      try {
+        await api._request('editMessageText', {
+          chat_id: chatId,
+          message_id: messageId,
+          text: `✅ <b>Verified!</b> You are now a member.\n\n🔥 Send me any Tinder username to start checking profiles!`,
+          parse_mode: 'HTML'
+        });
+      } catch (e) {}
+      await api._request('answerCallbackQuery', {
+        callback_query_id: callbackQuery.id,
+        text: "✅ Verified! You can now use the bot."
+      });
+    } else {
+      await api._request('answerCallbackQuery', {
+        callback_query_id: callbackQuery.id,
+        text: "❌ You haven't joined yet! Please join the channel first.",
+        show_alert: true
+      });
+    }
+  }
 }
 
 export default async function handleMessage(message, env) {
@@ -36,7 +105,45 @@ export default async function handleMessage(message, env) {
 
   // 1. Process CMD_START
   if (text.startsWith("/start")) {
-    await db.registerUser(telegramId, username, fullName);
+    // Extract referral ID from deep link
+    let referrerId = null;
+    const parts = text.split(" ");
+    if (parts.length > 1 && parts[1].startsWith("ref_")) {
+      try {
+        referrerId = parseInt(parts[1].replace("ref_", ""), 10);
+        if (isNaN(referrerId)) referrerId = null;
+      } catch (e) {}
+    }
+
+    const regResult = await db.registerUser(telegramId, username, fullName, referrerId);
+    
+    // Notify referrer if this is a new user
+    if (regResult && regResult.isNew && regResult.referredBy) {
+      try {
+        await api.sendMessage(regResult.referredBy,
+          `🎉 <b>New Referral!</b>\n\n` +
+          `<a href='tg://user?id=${telegramId}'>${escapeHtml(fullName || 'Someone')}</a> ` +
+          `joined using your referral link!\n` +
+          `Use /refer to see your total referrals.`
+        );
+      } catch (e) {}
+    }
+
+    // Check channel membership
+    const isMember = await checkChannelMembership(telegramId);
+    if (!isMember) {
+      await sendJoinPrompt(chatId);
+      return;
+    }
+
+    // Get bot username for referral link
+    let botUsername = "tinderchecker_bot";
+    try {
+      const me = await api._request('getMe');
+      botUsername = me.username;
+    } catch (e) {}
+    
+    const referralLink = `https://t.me/${botUsername}?start=ref_${telegramId}`;
     
     const welcomeText = 
       `🔥 <b>Welcome to Premium Tinder OSINT & DNA Checker!</b> 🔥\n\n` +
@@ -44,11 +151,13 @@ export default async function handleMessage(message, env) {
       `<i>Examples:</i>\n` +
       `• boy\n` +
       `• @boy\n` +
-      `• tinder.com/@boy`;
+      `• tinder.com/@boy\n\n` +
+      `📎 <b>Your Referral Link:</b>\n<code>${referralLink}</code>\n` +
+      `Share it & earn referral credits!`;
 
     await api.sendMessage(chatId, welcomeText, {
       reply_markup: {
-        inline_keyboard: [[{ text: "📢 Join Channel", url: "https://t.me/N_Notic" }]]
+        inline_keyboard: [[{ text: "📢 Join Channel", url: CHANNEL_URL }]]
       },
       disable_web_page_preview: true
     });
@@ -69,7 +178,34 @@ export default async function handleMessage(message, env) {
     return;
   }
 
-  // 3. Owner-only: CMD_STATS
+  // 3. CMD_REFER - anyone can use
+  if (text.startsWith("/refer")) {
+    const isMember = await checkChannelMembership(telegramId);
+    if (!isMember) {
+      await sendJoinPrompt(chatId);
+      return;
+    }
+
+    let botUsername = "tinderchecker_bot";
+    try {
+      const me = await api._request('getMe');
+      botUsername = me.username;
+    } catch (e) {}
+    
+    const referralLink = `https://t.me/${botUsername}?start=ref_${telegramId}`;
+    const referralCount = await db.getReferralCount(telegramId);
+
+    await api.sendMessage(chatId,
+      `🔗 <b>Your Referral Dashboard</b>\n\n` +
+      `📎 <b>Your Link:</b>\n<code>${referralLink}</code>\n\n` +
+      `👥 <b>Total Referrals:</b> <code>${referralCount}</code>\n\n` +
+      `Share your link — every new user who joins counts towards your referrals!`,
+      { disable_web_page_preview: true }
+    );
+    return;
+  }
+
+  // 4. Owner-only: CMD_STATS
   if (text.startsWith("/stats")) {
     if (!isAdmin) return;
     try {
@@ -79,12 +215,26 @@ export default async function handleMessage(message, env) {
         .map(([domain, status]) => `• <code>${domain}</code>: ${status}`)
         .join("\n");
 
+      const topReferrers = await db.getTopReferrers(5);
+      let topRefText = "";
+      if (topReferrers.length) {
+        const medals = ["🥇", "🥈", "🥉", "4️⃣", "5️⃣"];
+        topRefText = "\n🏆 <b>Top Referrers:</b>\n";
+        topReferrers.forEach((r, i) => {
+          const display = r.username ? `@${r.username}` : `<code>${r.user_id}</code>`;
+          topRefText += `${medals[i]} ${display}: <code>${r.referral_count}</code> referrals\n`;
+        });
+      }
+
       const statsReport = 
         `⚡ <b>TINDER BOT SUPERPOWERS DASHBOARD</b> ⚡\n` +
         `═══════════════════════════════════════\n\n` +
         `📊 <b>Telemetry & Database (Cloudflare D1):</b>\n` +
         `• Total Users: <code>${stats.userCount}</code>\n` +
         `• Total Queries Run: <code>${stats.queryCount}</code>\n\n` +
+        `🔗 <b>Referral System:</b>\n` +
+        `• Total Referrals: <code>${stats.totalReferrals}</code>\n` +
+        `${topRefText}\n` +
         `🌐 <b>API Health Matrix (Multi-Failover):</b>\n` +
         `${healthText}\n\n` +
         `═══════════════════════════════════════`;
@@ -96,7 +246,7 @@ export default async function handleMessage(message, env) {
     return;
   }
 
-  // 4. Owner-only: CMD_USERS
+  // 5. Owner-only: CMD_USERS
   if (text.startsWith("/users")) {
     if (!isAdmin) return;
     try {
@@ -110,7 +260,8 @@ export default async function handleMessage(message, env) {
       users.forEach((u, i) => {
         const uName = u.username || "No Username";
         const fName = u.full_name || "Unknown";
-        fileContent += `${i + 1}. ${fName} (@${uName}) | ID: ${u.user_id}\n`;
+        const refCount = u.referral_count || 0;
+        fileContent += `${i + 1}. ${fName} (@${uName}) | ID: ${u.user_id} | Referrals: ${refCount}\n`;
       });
 
       const encoder = new TextEncoder();
@@ -125,7 +276,7 @@ export default async function handleMessage(message, env) {
     return;
   }
 
-  // 5. Owner-only: CMD_BROADCAST
+  // 6. Owner-only: CMD_BROADCAST
   if (text.startsWith("/broadcast")) {
     if (!isAdmin) return;
     const broadcastMsg = text.replace("/broadcast", "").trim();
@@ -172,7 +323,14 @@ export default async function handleMessage(message, env) {
     return;
   }
 
-  // 6. Generic Tinder checker query handling
+  // 7. Generic Tinder checker query handling
+  // Force channel membership on every query
+  const isMember = await checkChannelMembership(telegramId);
+  if (!isMember) {
+    await sendJoinPrompt(chatId);
+    return;
+  }
+
   await db.registerUser(telegramId, username, fullName);
 
   const now = Date.now();
@@ -224,7 +382,7 @@ export default async function handleMessage(message, env) {
         reply_markup: {
           inline_keyboard: [
             [{ text: "🌹 Open Profile", url: `https://tinder.com/@${tinderUsername}` }],
-            [{ text: "📢 Join Channel", url: "https://t.me/N_Notic" }]
+            [{ text: "📢 Join Channel", url: CHANNEL_URL }]
           ]
         }
       });
@@ -304,7 +462,7 @@ export default async function handleMessage(message, env) {
         [{ text: "🌹 Open Profile", url: `https://tinder.com/@${tinderUsername}` }],
         [
           { text: "💸 Sell This Account", url: "https://t.me/T_ump" },
-          { text: "📢 Join Channel", url: "https://t.me/N_Notic" }
+          { text: "📢 Join Channel", url: CHANNEL_URL }
         ]
       ]
     };

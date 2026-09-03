@@ -9,6 +9,8 @@ class User(Base):
     user_id = Column(BigInteger, unique=True, index=True)
     username = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
+    referred_by = Column(BigInteger, nullable=True)
+    referral_count = Column(Integer, default=0)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class QueryLog(Base):

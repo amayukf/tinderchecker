@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, BigInteger, String, DateTime
+from sqlalchemy import Column, Integer, BigInteger, String, DateTime, Boolean
 from sqlalchemy.sql import func
 from app.database import Base
 
@@ -10,7 +10,9 @@ class User(Base):
     username = Column(String, nullable=True)
     full_name = Column(String, nullable=True)
     referred_by = Column(BigInteger, nullable=True)
-    referral_count = Column(Integer, default=0)
+    referral_verified = Column(Boolean, default=False)  # True = referral confirmed (anti-fraud)
+    referral_count = Column(Integer, default=0)  # Only verified referrals
+    query_count = Column(Integer, default=0)  # Track user activity for anti-fraud
     created_at = Column(DateTime(timezone=True), server_default=func.now())
 
 class QueryLog(Base):

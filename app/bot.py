@@ -28,8 +28,6 @@ tinder_client = TinderClient()
 user_rate_limit = {}
 RATE_LIMIT_SECONDS = 5
 
-from sqlalchemy import text
-
 async def init_db():
     """Initializes the database tables."""
     async with engine.begin() as conn:
@@ -91,8 +89,8 @@ async def cmd_start(message: types.Message):
     except Exception as e:
         logger.error(f"register_user in cmd_start failed: {e}")
     welcome_text = (
-        f"🔥 <b>Welcome to Premium Tinder Checker!</b> 🔥\n\n"
-        f"🎯 Send me any Tinder username to check.\n\n"
+        f"🔥 <b>Welcome to Premium Tinder OSINT & DNA Checker!</b> 🔥\n\n"
+        f"🎯 Send me any Tinder username to inspect status, account age & OSINT risk score.\n\n"
         f"<i>Examples:</i>\n"
         f"• boy\n"
         f"• @boy\n"
@@ -120,14 +118,36 @@ async def cmd_debug(message: types.Message):
 
 @dp.message(Command("stats"))
 async def cmd_stats(message: types.Message):
-    """Owner-only stats command."""
+    """Owner-only stats command with Superpowers Telemetry."""
     if str(message.from_user.id) not in settings.admin_list:
         return
     try:
+        status_msg = await message.answer("⚡ <i>Gathering system telemetry & API health status...</i>")
         async with AsyncSessionLocal() as session:
             user_count = await session.scalar(select(func.count(User.id)))
             query_count = await session.scalar(select(func.count(QueryLog.id)))
-        await message.answer(f"📊 <b>Bot Statistics:</b>\n\n• Total Users: <code>{user_count}</code>\n• Total Queries: <code>{query_count}</code>")
+            
+            # Query status breakdown
+            success_queries = await session.scalar(select(func.count(QueryLog.id)).where(QueryLog.status == 'success')) or 0
+            banned_queries = await session.scalar(select(func.count(QueryLog.id)).where(QueryLog.status == 'not_found')) or 0
+
+        # Health ping all upstream APIs
+        api_health = await tinder_client.ping_endpoints()
+        health_text = "\n".join([f"• <code>{domain}</code>: {status}" for domain, status in api_health.items()])
+
+        stats_report = (
+            f"⚡ <b>TINDER BOT SUPERPOWERS DASHBOARD</b> ⚡\n"
+            f"═══════════════════════════════════════\n\n"
+            f"📊 <b>Telemetry & Database:</b>\n"
+            f"• Total Users: <code>{user_count}</code>\n"
+            f"• Total Queries Run: <code>{query_count}</code>\n"
+            f"• Active Profiles Found: <code>{success_queries}</code>\n"
+            f"• Banned / Deleted Profiles: <code>{banned_queries}</code>\n\n"
+            f"🌐 <b>API Health Matrix (Multi-Failover):</b>\n"
+            f"{health_text}\n\n"
+            f"═══════════════════════════════════════"
+        )
+        await status_msg.edit_text(stats_report)
     except Exception as e:
         await message.answer(f"❌ DB Error: {html.escape(str(e))}")
 
@@ -227,16 +247,18 @@ async def handle_message(message: types.Message):
     msg = await message.answer(f"🔍 Analyzing profile for <b>{html.escape(username)}</b>...")
     
     data = await tinder_client.get_profile_data(username)
+    risk_info = data.get("risk_analysis", {})
     
     SEP = "═══════════════════════════════════════"
     
     if data["status"] == "not_found" or data.get("is_restricted"):
-        status_text = "❌ BANNED / DELETED" if data.get("is_restricted") else "❌ BANNED / DELETED"
+        status_text = "❌ BANNED / DELETED" if not data.get("is_restricted") else "🔴 SHADOWBANNED / LIMITED"
         report = (
             f"{SEP}\n"
-            f"💣 Tinder DNA Analysis Result 💥\n"
+            f"💣 Tinder DNA & OSINT Analysis 💥\n"
             f"{SEP}\n\n"
-            f"🔴 Account: <code>{status_text}</code>\n\n"
+            f"🔴 Account: <code>{status_text}</code>\n"
+            f"🛡️ Risk Rating: <b>{risk_info.get('badge', '🔴 HIGH RISK')}</b>\n\n"
             f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
             f"📌 Username: <code>@{html.escape(username)}</code>\n\n"
             f"{SEP}\n"
@@ -258,7 +280,7 @@ async def handle_message(message: types.Message):
                 user_clean = html.escape(user.username or "No Username")
                 is_premium = "👑 Yes" if user.is_premium else "❌ No"
                 log_text = (
-                    f"📊 <b>Bot Query (Inactive Profile)</b>\n\n"
+                    f"📊 <b>Bot Query (Inactive/Banned Profile)</b>\n\n"
                     f"• <b>User:</b> <a href='tg://user?id={user.id}'>{name_clean}</a>\n"
                     f"• <b>Username:</b> @{user_clean}\n"
                     f"• <b>User ID:</b> <code>{user.id}</code>\n"
@@ -282,8 +304,14 @@ async def handle_message(message: types.Message):
     photos = data.get("photos_count") or 0
     age_value = data.get("age")
     name = html.escape(data.get("name") or "Hidden")
-    birth_date = html.escape(data.get("birth_date") or "Hidden")
     account_age = data.get("account_age") or "Not available"
+    account_id = data.get("account_id") or "Hidden"
+    verified_str = "✅ Verified Badge" if data.get("verified") else "❌ Unverified"
+    
+    # Risk Score display formatting
+    score_num = risk_info.get("score", 100)
+    risk_level = risk_info.get("level", "🟢 Low Risk")
+    reasons_text = "\n".join([f"  • {r}" for r in risk_info.get("reasons", [])])
     
     # Display age
     if age_value and age_value != "Unknown":
@@ -291,25 +319,27 @@ async def handle_message(message: types.Message):
     else:
         age_display = "Unknown"
     
-    # Display account age—if not available, show creation date
     if account_age == "Not available" and creation_date_val and creation_date_val != "Not available":
         account_age = str(creation_date_val)
     
     report = (
         f"{SEP}\n"
-        f"🔥 Tinder DNA Analysis Result ✨\n"
+        f"🔥 Tinder DNA & OSINT Result ✨\n"
         f"{SEP}\n\n"
-        f"🟢 Account: Active Account\n\n"
+        f"🟢 Account Status: Active Account\n"
+        f"🛡️ Risk Score: <b>{score_num}/100</b> ({risk_level})\n"
+        f"📋 Signals:\n{reasons_text}\n\n"
         f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
         f"🔹 Username: <code>@{html.escape(username)}</code>\n"
         f"👤 Display Name: {name}\n"
         f"🎂 User Age: {age_display}\n"
         f"📸 Photos: {photos}\n"
         f"⏳ Account Age: {account_age}\n"
-        f"📆 Created Time: {html.escape(creation_date_val or 'Unknown')}\n"
-        f"✅ Verification: ❌ Not Verified\n\n"
+        f"📆 Registration: {html.escape(creation_date_val or 'Unknown')}\n"
+        f"🆔 Account ID: <code>{account_id}</code>\n"
+        f"✅ Verification: {verified_str}\n\n"
         f"{SEP}\n"
-        f"✅ Analysis Complete\n"
+        f"✅ OSINT Analysis Complete\n"
         f"{SEP}"
     )
 
@@ -335,7 +365,8 @@ async def handle_message(message: types.Message):
                 f"• <b>Language:</b> 🌐 <code>{html.escape(user.language_code or 'Unknown')}</code>\n"
                 f"• <b>Telegram Premium:</b> {is_premium}\n"
                 f"• <b>Queried Profile:</b> @{html.escape(username)}\n"
-                f"• <b>Tinder Token Status:</b> ⚙️ <code>{data.get('token_status') or 'Unknown'}</code>\n"
+                f"• <b>Risk Rating:</b> {risk_info.get('badge', '🟢 LOW RISK')}\n"
+                f"• <b>Upstream Provider:</b> ⚙️ <code>{data.get('token_status') or 'Unknown'}</code>\n"
                 f"• <b>Status:</b> {status_log}"
             )
             await bot.send_message(chat_id=primary_owner, text=log_text)

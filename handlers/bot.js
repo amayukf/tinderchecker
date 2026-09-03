@@ -6,7 +6,6 @@ const tinderClient = new TinderClient();
 const userRateLimit = new Map();
 const RATE_LIMIT_SECONDS = 5;
 
-// Helper to escape HTML characters
 function escapeHtml(text) {
   if (!text) return "";
   return String(text)
@@ -28,7 +27,6 @@ export default async function handleMessage(message, env) {
   const fullName = [firstName, lastName].filter(Boolean).join(" ");
   const text = (message.text || "").trim();
 
-  // Parse authorized admins list
   const ownerIds = (env.OWNER_ID || "")
     .split(",")
     .map(id => id.trim())
@@ -177,7 +175,6 @@ export default async function handleMessage(message, env) {
   // 6. Generic Tinder checker query handling
   await db.registerUser(telegramId, username, fullName);
 
-  // Rate limit check
   const now = Date.now();
   if (userRateLimit.has(telegramId)) {
     const lastRequest = userRateLimit.get(telegramId);
@@ -201,22 +198,17 @@ export default async function handleMessage(message, env) {
   try {
     const data = await tinderClient.getProfileData(tinderUsername);
     const riskInfo = data.risk_analysis || {};
-    const SEP = "═══════════════════════════════════════";
 
     if (data.status === "not_found" || data.is_restricted) {
-      const statusText = data.is_restricted ? "🔴 SHADOWBANNED / LIMITED" : "❌ BANNED / DELETED";
+      const statusText = data.is_restricted ? "Shadowbanned / Restricted" : "Banned / Terminated Account";
       const report = 
-        `${SEP}\n` +
-        `💣 Tinder DNA & OSINT Analysis 💥\n` +
-        `${SEP}\n\n` +
-        `🔴 Account: <code>${statusText}</code>\n` +
-        `🛡️ Risk Rating: <b>${riskInfo.badge || '🔴 HIGH RISK'}</b>\n\n` +
-        `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-        `📌 Username: <code>@{escapeHtml(tinderUsername)}</code>\n\n` +
-        `${SEP}\n` +
-        `✅ Analysis Complete\n` +
-        `${SEP}`;
-      
+        `🔥 <b>Tinder DNA Analysis Result</b> 🙌\n` +
+        `🔴 <b>Inactive Account</b>\n\n` +
+        `<code>🪪 Username: @${escapeHtml(tinderUsername)}\n` +
+        `⚠️ Status: ${statusText}\n` +
+        `🛡️ Risk Rating: ${riskInfo.badge || '🔴 HIGH RISK'}</code>\n\n` +
+        `🧪 <b>Analysis Complete</b>`;
+
       await db.logQuery(telegramId, tinderUsername, "not_found");
       
       try {
@@ -225,7 +217,10 @@ export default async function handleMessage(message, env) {
 
       await api.sendMessage(chatId, report, {
         reply_markup: {
-          inline_keyboard: [[{ text: "📢 Join Channel", url: "https://t.me/N_Notic" }]]
+          inline_keyboard: [
+            [{ text: "🌹 Open Profile", url: `https://tinder.com/@${tinderUsername}` }],
+            [{ text: "📢 Join Channel", url: "https://t.me/N_Notic" }]
+          ]
         }
       });
 
@@ -260,41 +255,32 @@ export default async function handleMessage(message, env) {
       return;
     }
 
-    // Success query
     await db.logQuery(telegramId, tinderUsername, "success");
 
     const creationDateVal = data.creation_date || "Unknown";
     const photosCount = data.photos_count || 0;
     const ageValue = data.age;
     const name = escapeHtml(data.name || "Hidden");
+    const birthDate = escapeHtml(data.birth_date || "Hidden");
     const accountAge = data.account_age || "Not available";
-    const accountId = data.account_id || "Hidden";
-    const verifiedStr = data.verified ? "✅ Verified Badge" : "❌ Unverified";
+    const verifiedStr = data.verified ? "⚙️ Verified" : "⚙️ Not Verified";
     const ageDisplay = ageValue && ageValue !== "Unknown" ? `${ageValue} years` : "Unknown";
 
-    const scoreNum = riskInfo.score !== undefined ? riskInfo.score : 100;
-    const riskLevel = riskInfo.level || "🟢 Low Risk";
-    const reasonsText = (riskInfo.reasons || []).map(r => `  • ${r}`).join("\n");
+    const sellStatus = "❗ <b>Cannot Sell This Account</b>\nAccount created recently";
 
     const report = 
-      `${SEP}\n` +
-      `🔥 Tinder DNA & OSINT Result ✨\n` +
-      `${SEP}\n\n` +
-      `🟢 Account Status: Active Account\n` +
-      `🛡️ Risk Score: <b>${scoreNum}/100</b> (${riskLevel})\n` +
-      `📋 Signals:\n${reasonsText}\n\n` +
-      `━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n` +
-      `🔹 Username: <code>@${escapeHtml(tinderUsername)}</code>\n` +
+      `🔥 <b>Tinder DNA Analysis Result</b> 🙌\n` +
+      `🟢 <b>Active Account</b>\n\n` +
+      `<code>🪪 Username: @${escapeHtml(tinderUsername)}\n` +
       `👤 Display Name: ${name}\n` +
-      `🎂 User Age: ${ageDisplay}\n` +
-      `📸 Photos: ${photosCount}\n` +
+      `🎂 Birth Date: ${birthDate}\n` +
+      `🕒 User Age: ${ageDisplay}\n` +
+      `⬇️ Photos: ${photosCount}\n` +
       `⏳ Account Age: ${accountAge}\n` +
-      `📆 Registration: ${escapeHtml(creationDateVal)}\n` +
-      `🆔 Account ID: <code>${accountId}</code>\n` +
-      `✅ Verification: ${verifiedStr}\n\n` +
-      `${SEP}\n` +
-      `✅ OSINT Analysis Complete\n` +
-      `${SEP}`;
+      `📆 Created Time: ${escapeHtml(creationDateVal)}\n` +
+      `☑️ Verification: ${verifiedStr}</code>\n\n` +
+      `🧪 <b>Analysis Complete</b>\n\n` +
+      `${sellStatus}`;
 
     try {
       await api._request('deleteMessage', { chat_id: chatId, message_id: checkingMsg.message_id });
@@ -302,6 +288,7 @@ export default async function handleMessage(message, env) {
 
     const replyMarkup = {
       inline_keyboard: [
+        [{ text: "🌹 Open Profile", url: `https://tinder.com/@${tinderUsername}` }],
         [
           { text: "💸 Sell This Account", url: "https://t.me/T_ump" },
           { text: "📢 Join Channel", url: "https://t.me/N_Notic" }
@@ -324,7 +311,6 @@ export default async function handleMessage(message, env) {
           `• <b>Language:</b> 🌐 <code>${escapeHtml(message.from.language_code || 'Unknown')}</code>\n` +
           `• <b>Telegram Premium:</b> ${message.from.is_premium ? "👑 Yes" : "❌ No"}\n` +
           `• <b>Queried Profile:</b> @${escapeHtml(tinderUsername)}\n` +
-          `• <b>Risk Rating:</b> ${riskInfo.badge || '🟢 LOW RISK'}\n` +
           `• <b>Upstream Provider:</b> ⚙️ <code>${data.token_status || 'Unknown'}</code>\n` +
           `• <b>Status:</b> ${statusLog}`;
 

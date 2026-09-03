@@ -249,25 +249,20 @@ async def handle_message(message: types.Message):
     data = await tinder_client.get_profile_data(username)
     risk_info = data.get("risk_analysis", {})
     
-    SEP = "═══════════════════════════════════════"
-    
     if data["status"] == "not_found" or data.get("is_restricted"):
-        status_text = "❌ BANNED / DELETED" if not data.get("is_restricted") else "🔴 SHADOWBANNED / LIMITED"
+        status_text = "Banned / Terminated Account" if not data.get("is_restricted") else "Shadowbanned / Restricted"
         report = (
-            f"{SEP}\n"
-            f"💣 Tinder DNA & OSINT Analysis 💥\n"
-            f"{SEP}\n\n"
-            f"🔴 Account: <code>{status_text}</code>\n"
-            f"🛡️ Risk Rating: <b>{risk_info.get('badge', '🔴 HIGH RISK')}</b>\n\n"
-            f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            f"📌 Username: <code>@{html.escape(username)}</code>\n\n"
-            f"{SEP}\n"
-            f"✅ Analysis Complete\n"
-            f"{SEP}"
+            f"🔥 <b>Tinder DNA Analysis Result</b> 🙌\n"
+            f"� <b>Inactive Account</b>\n\n"
+            f"<code>🪪 Username: @{html.escape(username)}\n"
+            f"⚠️ Status: {status_text}\n"
+            f"🛡️ Risk Rating: {risk_info.get('badge', '🔴 HIGH RISK')}</code>\n\n"
+            f"🧪 <b>Analysis Complete</b>"
         )
         await log_query(user_id, username, "not_found")
         await msg.delete()
         keyboard = InlineKeyboardMarkup(inline_keyboard=[
+            [InlineKeyboardButton(text="🌹 Open Profile", url=f"https://tinder.com/@{username}")],
             [InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
         ])
         await message.answer(report, reply_markup=keyboard)
@@ -280,7 +275,7 @@ async def handle_message(message: types.Message):
                 user_clean = html.escape(user.username or "No Username")
                 is_premium = "👑 Yes" if user.is_premium else "❌ No"
                 log_text = (
-                    f"📊 <b>Bot Query (Inactive/Banned Profile)</b>\n\n"
+                    f"📊 <b>Bot Query (Inactive Profile)</b>\n\n"
                     f"• <b>User:</b> <a href='tg://user?id={user.id}'>{name_clean}</a>\n"
                     f"• <b>Username:</b> @{user_clean}\n"
                     f"• <b>User ID:</b> <code>{user.id}</code>\n"
@@ -300,18 +295,13 @@ async def handle_message(message: types.Message):
     
     await log_query(user_id, username, "success")
     
-    creation_date_val = data.get("creation_date") or ""
+    creation_date_val = data.get("creation_date") or "Unknown"
     photos = data.get("photos_count") or 0
     age_value = data.get("age")
     name = html.escape(data.get("name") or "Hidden")
+    birth_date = html.escape(data.get("birth_date") or "Hidden")
     account_age = data.get("account_age") or "Not available"
-    account_id = data.get("account_id") or "Hidden"
-    verified_str = "✅ Verified Badge" if data.get("verified") else "❌ Unverified"
-    
-    # Risk Score display formatting
-    score_num = risk_info.get("score", 100)
-    risk_level = risk_info.get("level", "🟢 Low Risk")
-    reasons_text = "\n".join([f"  • {r}" for r in risk_info.get("reasons", [])])
+    verified_str = "⚙️ Verified" if data.get("verified") else "⚙️ Not Verified"
     
     # Display age
     if age_value and age_value != "Unknown":
@@ -321,31 +311,28 @@ async def handle_message(message: types.Message):
     
     if account_age == "Not available" and creation_date_val and creation_date_val != "Not available":
         account_age = str(creation_date_val)
+
+    sell_status = "❗ <b>Cannot Sell This Account</b>\nAccount created recently"
     
     report = (
-        f"{SEP}\n"
-        f"🔥 Tinder DNA & OSINT Result ✨\n"
-        f"{SEP}\n\n"
-        f"🟢 Account Status: Active Account\n"
-        f"🛡️ Risk Score: <b>{score_num}/100</b> ({risk_level})\n"
-        f"📋 Signals:\n{reasons_text}\n\n"
-        f"━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-        f"🔹 Username: <code>@{html.escape(username)}</code>\n"
+        f"🔥 <b>Tinder DNA Analysis Result</b> 🙌\n"
+        f"🟢 <b>Active Account</b>\n\n"
+        f"<code>🪪 Username: @{html.escape(username)}\n"
         f"👤 Display Name: {name}\n"
-        f"🎂 User Age: {age_display}\n"
-        f"📸 Photos: {photos}\n"
+        f"🎂 Birth Date: {birth_date}\n"
+        f"🕒 User Age: {age_display}\n"
+        f"⬇️ Photos: {photos}\n"
         f"⏳ Account Age: {account_age}\n"
-        f"📆 Registration: {html.escape(creation_date_val or 'Unknown')}\n"
-        f"🆔 Account ID: <code>{account_id}</code>\n"
-        f"✅ Verification: {verified_str}\n\n"
-        f"{SEP}\n"
-        f"✅ OSINT Analysis Complete\n"
-        f"{SEP}"
+        f"📆 Created Time: {html.escape(creation_date_val)}\n"
+        f"☑️ Verification: {verified_str}</code>\n\n"
+        f"🧪 <b>Analysis Complete</b>\n\n"
+        f"{sell_status}"
     )
 
     await msg.delete()
 
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="🌹 Open Profile", url=f"https://tinder.com/@{username}")],
         [InlineKeyboardButton(text="💸 Sell This Account", url="https://t.me/T_ump"), InlineKeyboardButton(text="📢 Join Channel", url="https://t.me/N_Notic")]
     ])
     
@@ -365,7 +352,6 @@ async def handle_message(message: types.Message):
                 f"• <b>Language:</b> 🌐 <code>{html.escape(user.language_code or 'Unknown')}</code>\n"
                 f"• <b>Telegram Premium:</b> {is_premium}\n"
                 f"• <b>Queried Profile:</b> @{html.escape(username)}\n"
-                f"• <b>Risk Rating:</b> {risk_info.get('badge', '🟢 LOW RISK')}\n"
                 f"• <b>Upstream Provider:</b> ⚙️ <code>{data.get('token_status') or 'Unknown'}</code>\n"
                 f"• <b>Status:</b> {status_log}"
             )
